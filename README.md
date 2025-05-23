@@ -14,6 +14,8 @@
 - [x] release v0.0.2-pre
 - [x] 支持 ugc_video 不同 p 不互相覆盖, 以 page 作为标识符, video_name 作为文件名.
 - [x] release v0.0.2-pre.1
+- [x] 不在 Logger 中打印 page.
+- [x] release v0.0.2-pre.2
 
 
 

@@ -742,7 +742,7 @@ wheels = [
 
 [[package]]
 name = "uiya-yutto"
-version = "0.0.2rc0"
+version = "0.0.2rc2"
 source = { editable = "." }
 dependencies = [
     { name = "aiofiles" },
