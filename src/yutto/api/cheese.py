@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 class CheeseListItem(TypedDict):
     id: int
     name: str
+    url: str
     cid: CId
     episode_id: EpisodeId
     avid: AvId
@@ -65,6 +66,7 @@ async def get_cheese_list(ctx: FetcherContext, client: AsyncClient, season_id: S
             CheeseListItem(
                 id=i + 1,
                 name=item["title"],
+                url=f"https://www.bilibili.com/cheese/play/ep{item['id']}",
                 cid=CId(str(item["cid"])),
                 episode_id=EpisodeId(str(item["id"])),
                 avid=AId(str(item["aid"])),

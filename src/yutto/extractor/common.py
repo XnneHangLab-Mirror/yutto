@@ -74,6 +74,7 @@ async def extract_bangumi_data(
             else EmptyDanmakuData
         )
         metadata = bangumi_info["metadata"] if options["require_metadata"] else None
+        cover_link = bangumi_info["metadata"]["thumb"] if options["require_cover"] else None
         cover_data = (
             await Fetcher.fetch_bin(ctx, client, bangumi_info["metadata"]["thumb"])
             if options["require_cover"]
@@ -95,12 +96,14 @@ async def extract_bangumi_data(
         subpath_variables_base.update(subpath_variables)
         path = resolve_path_template(options["subpath_template"], auto_subpath_template, subpath_variables_base)
         return EpisodeData(
+            url=bangumi_info["url"],
             videos=videos,
             audios=audios,
             subtitles=subtitles,
             metadata=metadata,
             danmaku=danmaku,
             cover_data=cover_data,
+            cover_link=cover_link,
             chapter_info_data=[],
             path=Path(path),
         )
@@ -135,6 +138,7 @@ async def extract_cheese_data(
             else EmptyDanmakuData
         )
         metadata = cheese_info["metadata"] if options["require_metadata"] else None
+        cover_link = cheese_info["metadata"]["thumb"] if options["require_cover"] else None
         cover_data = (
             await Fetcher.fetch_bin(ctx, client, cheese_info["metadata"]["thumb"]) if options["require_cover"] else None
         )
@@ -154,12 +158,14 @@ async def extract_cheese_data(
         subpath_variables_base.update(subpath_variables)
         path = resolve_path_template(options["subpath_template"], auto_subpath_template, subpath_variables_base)
         return EpisodeData(
+            url=cheese_info["url"],
             videos=videos,
             audios=audios,
             subtitles=subtitles,
             metadata=metadata,
             danmaku=danmaku,
             cover_data=cover_data,
+            cover_link=cover_link,
             chapter_info_data=[],
             path=Path(path),
         )
@@ -198,6 +204,7 @@ async def extract_ugc_video_data(
         metadata = ugc_video_info["metadata"] if options["require_metadata"] else None
         if metadata and chapter_info_data:
             attach_chapter_info(metadata, chapter_info_data)
+        cover_link = ugc_video_info["metadata"]["thumb"] if options["require_cover"] else None
         cover_data = (
             await Fetcher.fetch_bin(ctx, client, ugc_video_info["metadata"]["thumb"])
             if options["require_cover"]
@@ -227,12 +234,14 @@ async def extract_ugc_video_data(
         subpath_variables_base.update(subpath_variables)
         path = resolve_path_template(options["subpath_template"], auto_subpath_template, subpath_variables_base)
         return EpisodeData(
+            url=ugc_video_info["url"],
             videos=videos,
             audios=audios,
             subtitles=subtitles,
             metadata=metadata,
             danmaku=danmaku,
             cover_data=cover_data,
+            cover_link=cover_link,
             chapter_info_data=chapter_info_data,
             path=Path(path),
         )

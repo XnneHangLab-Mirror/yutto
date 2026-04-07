@@ -171,6 +171,12 @@ def add_download_arguments(parser: argparse.ArgumentParser, settings: YuttoSetti
         help="用来存放下载过程中临时文件的目录，默认为下载目录",
     )
     group_basic.add_argument(
+        "--ffmpeg-path",
+        default=settings.basic.ffmpeg_path,
+        type=str,
+        help="ffmpeg 可执行文件路径，默认为系统 PATH 中的 ffmpeg",
+    )
+    group_basic.add_argument(
         "-c", "--sessdata", default=settings.basic.sessdata, help="（弃用）Cookies 中的 SESSDATA 字段，推荐改用 --auth"
     )
     group_basic.add_argument(
@@ -301,6 +307,12 @@ def add_download_arguments(parser: argparse.ArgumentParser, settings: YuttoSetti
         default=settings.resource.save_cover,
         action="store_true",
         help="生成视频流封面后单独保存封面文件",
+    )
+    group_resource.add_argument(
+        "--skip-download",
+        default=settings.resource.skip_download,
+        action="store_true",
+        help="仅解析视频信息和资源项，跳过资源项目下载。",
     )
     group_resource.set_defaults(
         require_video=settings.resource.require_video,

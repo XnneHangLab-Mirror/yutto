@@ -76,7 +76,7 @@ def show_videos_info(videos: list[VideoUrlMeta], selected: int):
         )
         if i == selected:
             log = colored_string(log, fore="blue")
-        Logger.info(log)
+        Logger.custom(log, badge=Badge("视频质量", fore="black", back="cyan"))
 
 
 def show_audios_info(audios: list[AudioUrlMeta], selected: int):
@@ -91,7 +91,7 @@ def show_audios_info(audios: list[AudioUrlMeta], selected: int):
         )
         if i == selected:
             log = colored_string(log, fore="magenta")
-        Logger.info(log)
+        Logger.custom(log, badge=Badge("音频质量", fore="black", back="cyan"))
 
 
 def create_mirrors_filter(banned_mirrors_pattern: str | None) -> Callable[[list[str]], list[str]]:
@@ -196,7 +196,7 @@ def merge_video_and_audio(
 ):
     """合并音视频"""
 
-    ffmpeg = FFmpeg()
+    ffmpeg = FFmpeg(options["ffmpeg_path"])
     command_builder = FFmpegCommandBuilder()
     Logger.info("开始合并……")
 
@@ -303,10 +303,12 @@ async def process_download(
     danmaku = episode_data["danmaku"]
     metadata = episode_data["metadata"]
     cover_data = episode_data["cover_data"]
+    cover_link = episode_data["cover_link"]
     chapter_info_data = episode_data["chapter_info_data"]
     output_dir, tmp_dir, filename = resolve_path(options["output_dir"], options["tmp_dir"], episode_data["path"])
     require_video = options["require_video"]
     require_audio = options["require_audio"]
+    skip_download = options["skip_download"]
     metadata_format = options["metadata_format"]
     danmaku_options = options["danmaku_options"]
     Logger.info(f"开始处理视频 {filename}")
@@ -323,7 +325,7 @@ async def process_download(
     audio = select_audio(audios, options["audio_quality"], options["audio_download_codec"])
     will_download_video = video is not None and require_video
     will_download_audio = audio is not None and require_audio
-
+    Logger.custom(episode_data["url"], badge=Badge("LINK", fore="black", back="cyan"))
     # 显示音视频详细信息
     show_videos_info(
         videos,
@@ -352,42 +354,78 @@ async def process_download(
 
     # 保存字幕
     if subtitles:
-        for subtitle in subtitles:
-            write_subtitle(subtitle["lines"], output_path, subtitle["lang"])
-        Logger.custom(
-            "{} 字幕已全部生成".format(", ".join([subtitle["lang"] for subtitle in subtitles])),
-            badge=Badge("字幕", fore="black", back="cyan"),
-        )
+        if not skip_download:
+            for subtitle in subtitles:
+                write_subtitle(subtitle["lines"], output_path, subtitle["lang"])
+            Logger.custom(
+                "{} 字幕已全部生成".format(", ".join([subtitle["lang"] for subtitle in subtitles])),
+                badge=Badge("字幕", fore="black", back="cyan"),
+            )
+        else:
+            Logger.custom(
+                "存在可下载字幕",
+                badge=Badge("字幕", fore="black", back="cyan"),
+            )
 
     # 保存弹幕
     if danmaku["data"]:
-        write_danmaku(
-            danmaku,
-            str(output_path),
-            video["height"] if video is not None else 1080,  # 未下载视频时自动按照 1920x1080 处理
-            video["width"] if video is not None else 1920,
-            danmaku_options,
-        )
-        Logger.custom(
-            "{} 弹幕已生成".format(danmaku["save_type"]).upper(), badge=Badge("弹幕", fore="black", back="cyan")
-        )
+        if not skip_download:
+            write_danmaku(
+                danmaku,
+                str(output_path),
+                video["height"] if video is not None else 1080,  # 未下载视频时自动按照 1920x1080 处理
+                video["width"] if video is not None else 1920,
+                danmaku_options,
+            )
+            Logger.custom(
+                "{} 弹幕已生成".format(danmaku["save_type"]).upper(), badge=Badge("弹幕", fore="black", back="cyan")
+            )
+        else:
+            Logger.custom(
+                "存在可下载弹幕",
+                badge=Badge("弹幕", fore="black", back="cyan"),
+            )
 
     # 保存媒体描述文件
     if metadata is not None:
-        write_metadata(metadata, output_path, metadata_format)
-        Logger.custom("NFO 媒体描述文件已生成", badge=Badge("描述文件", fore="black", back="cyan"))
+        if not skip_download:
+            write_metadata(metadata, output_path, metadata_format)
+            Logger.custom("NFO 媒体描述文件已生成", badge=Badge("描述文件", fore="black", back="cyan"))
+        else:
+            Logger.custom(
+                f"{metadata}",
+                badge=Badge("描述文件", fore="black", back="cyan"),
+            )
 
     # 保存封面
-    if cover_data is not None:
-        cover_path.write_bytes(cover_data)
-        if options["save_cover"]:
-            cover_save_path = output_dir.joinpath(f"{filename}-poster.jpg")
-            cover_save_path.write_bytes(cover_data)
-            Logger.custom("封面已生成", badge=Badge("封面", fore="black", back="cyan"))
+    if cover_link is not None:
+        if not skip_download:
+            if cover_data is not None:
+                cover_path.write_bytes(cover_data)
+                if options["save_cover"]:
+                    cover_save_path = output_dir.joinpath(f"{filename}-poster.jpg")
+                    cover_save_path.write_bytes(cover_data)
+                    Logger.custom("封面已生成", badge=Badge("封面", fore="black", back="cyan"))
+        else:
+            Logger.custom(
+                f"{cover_link}",
+                badge=Badge("封面", fore="black", back="cyan"),
+            )
+    else:
+        Logger.warning("封面链接不存在，跳过下载")
 
     # 保存章节信息
     if chapter_info_data:
-        write_chapter_info(filename, chapter_info_data, chapter_info_path)
+        if not skip_download:
+            write_chapter_info(filename, chapter_info_data, chapter_info_path)
+        else:
+            Logger.custom(
+                f"{chapter_info_data}",
+                badge=Badge("章节", fore="black", back="cyan"),
+            )
+
+    if skip_download:
+        return DownloadState.SKIP
 
     if output_path.exists():
         if not options["overwrite"]:

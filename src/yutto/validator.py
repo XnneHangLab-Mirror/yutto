@@ -99,7 +99,7 @@ def initial_validation(ctx: FetcherContext, args: argparse.Namespace):
 def validate_basic_arguments(args: argparse.Namespace):
     """检查 argparse 无法检查的选项，并设置某些全局的状态"""
 
-    ffmpeg = FFmpeg()
+    ffmpeg = FFmpeg(args.ffmpeg_path)
 
     download_vcodec_priority: list[VideoCodec] = video_codec_priority_default
     if args.download_vcodec_priority is not None:

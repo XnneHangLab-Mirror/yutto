@@ -48,6 +48,7 @@ class YuttoBasicSettings(BaseModel):
     proxy: Annotated[str, Field("auto")]
     dir: Annotated[str, Field("./")]
     tmp_dir: Annotated[str | None, Field(None)]
+    ffmpeg_path: Annotated[str, Field("ffmpeg")]
     sessdata: Annotated[str, Field("")]  # legacy 兼容字段，推荐使用 [auth].auth
     subpath_template: Annotated[str, Field("{auto}")]
     aliases: Annotated[dict[str, str], Field(dict[str, str]())]
@@ -70,6 +71,7 @@ class YuttoResourceSettings(BaseModel):
     require_cover: Annotated[bool, Field(True)]
     require_chapter_info: Annotated[bool, Field(True)]
     save_cover: Annotated[bool, Field(False)]
+    skip_download: Annotated[bool, Field(False)]
 
 
 class YuttoDanmakuSettings(BaseModel):

@@ -7,7 +7,7 @@ import urllib.request
 from pathlib import Path
 
 from yutto.exceptions import ErrorCode
-from yutto.utils.console.logger import Logger
+from yutto.utils.console.logger import Badge, Logger
 
 
 def path_from_cli(path: str) -> Path:
@@ -71,7 +71,7 @@ def parse_episodes_selection(episodes_str: str, total: int) -> list[int]:
         return value if value > 0 else value + total + 1
 
     # 解析字符串为列表
-    Logger.info(f"全 {total} 话")
+    Logger.custom(f"全 {total} 话", badge=Badge("全集", fore="black", back="cyan"))
     if validate_episodes_selection(episodes_str):
         episodes_str = episodes_str.replace("$", "-1")
         episode_list: list[int] = []

@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 class BangumiListItem(TypedDict):
     id: int
     name: str
+    url: str
     cid: CId
     episode_id: EpisodeId
     avid: AvId
@@ -81,6 +82,7 @@ async def get_bangumi_list(ctx: FetcherContext, client: AsyncClient, season_id: 
             BangumiListItem(
                 id=i + 1,
                 name=_bangumi_episode_title(item["title"], item["long_title"]),
+                url=item["share_url"],
                 cid=CId(str(item["cid"])),
                 episode_id=EpisodeId(str(item["id"])),
                 avid=BvId(item["bvid"]),

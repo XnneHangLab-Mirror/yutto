@@ -58,6 +58,7 @@ class _UgcVideoInfo(TypedDict):
 class UgcVideoListItem(TypedDict):
     id: int
     name: str
+    url: str
     avid: AvId
     cid: CId
     metadata: MetaData
@@ -161,6 +162,7 @@ async def get_ugc_video_list(ctx: FetcherContext, client: AsyncClient, avid: AvI
         UgcVideoListItem(
             id=i + 1,
             name=item["part"],
+            url=avid.as_bvid().to_url() + f"?p={i + 1}",
             avid=avid,
             cid=CId(str(item["cid"])),
             metadata=_parse_ugc_video_metadata(video_info, page_info, is_first_page=i == 0),
