@@ -49,7 +49,7 @@ class FavouritesExtractor(BatchExtractor):
         )
         Logger.custom(favourite_info["title"], Badge("收藏夹", fore="black", back="cyan"))
 
-        ugc_video_info_list: list[tuple[UgcVideoListItem, str, int, str]] = []
+        ugc_video_info_list: list[tuple[UgcVideoListItem, str, int, str, str | None]] = []
 
         for favourite_video in await get_favourite_items(ctx, client, self.fid):
             avid = favourite_video["avid"]
@@ -64,7 +64,7 @@ class FavouritesExtractor(BatchExtractor):
                 favourite_title = favourite_video["title"] or ugc_video_list["title"]
                 is_single_page_video = len(ugc_video_list["pages"]) == 1
                 for ugc_video_item in ugc_video_list["pages"]:
-                    resolved_video_item, auto_subpath_template = normalize_favourite_video_item(
+                    resolved_video_item, auto_subpath_template, display_group = normalize_favourite_video_item(
                         ugc_video_item,
                         favourite_title,
                         is_single_page_video=is_single_page_video,
@@ -75,6 +75,7 @@ class FavouritesExtractor(BatchExtractor):
                             favourite_title,
                             ugc_video_list["pubdate"],
                             auto_subpath_template,
+                            display_group,
                         )
                     )
             except (NotFoundError, NoAccessPermissionError) as e:
@@ -96,7 +97,8 @@ class FavouritesExtractor(BatchExtractor):
                         "pubdate": pubdate,
                     },
                     auto_subpath_template,
+                    display_group=display_group,
                 )
             )
-            for ugc_video_item, title, pubdate, auto_subpath_template in ugc_video_info_list
+            for ugc_video_item, title, pubdate, auto_subpath_template, display_group in ugc_video_info_list
         ]

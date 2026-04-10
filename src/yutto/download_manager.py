@@ -53,6 +53,26 @@ class DownloadTask:
     args: argparse.Namespace
 
 
+def show_batch_episode_title(
+    episode_data: EpisodeData, index: int, total: int, current_display_group: str | None
+) -> str | None:
+    display_group = episode_data["display_group"]
+    if display_group is not None and display_group != current_display_group:
+        Logger.custom(display_group, Badge("列表", fore="black", back="cyan"))
+        current_display_group = display_group
+    elif display_group is None:
+        current_display_group = None
+
+    display_name = episode_data["display_name"]
+    if display_group is not None:
+        display_name = f"  {display_name}"
+    Logger.custom(
+        display_name,
+        Badge(f"[{index}/{total}]", fore="black", back="cyan"),
+    )
+    return current_display_group
+
+
 class DownloadManager:
     queue: Queue[Maybe[DownloadTask]]
 
@@ -199,6 +219,7 @@ class DownloadManager:
             sys.exit(ErrorCode.WRONG_URL_ERROR.value)
 
         current_download_state = DownloadState.SKIP
+        current_display_group: str | None = None
 
         # 下载～
         for i, episode_data_coro in enumerate(download_list):
@@ -221,9 +242,11 @@ class DownloadManager:
             # 保证路径唯一
             episode_data = ensure_unique_path(episode_data, self.unique_path)
             if args.batch:
-                Logger.custom(
-                    f"{episode_data['path'].name}",
-                    Badge(f"[{i + 1}/{len(download_list)}]", fore="black", back="cyan"),
+                current_display_group = show_batch_episode_title(
+                    episode_data,
+                    i + 1,
+                    len(download_list),
+                    current_display_group,
                 )
 
             current_download_state = await process_download(
@@ -267,6 +290,7 @@ def ensure_unique_path(episode_data: EpisodeData, unique_name_resolver: Callable
     original_path = episode_data["path"]
     new_path = Path(unique_name_resolver(str(original_path)))
     episode_data["path"] = new_path
+    episode_data["display_name"] = new_path.name
     if original_path != new_path:
         Logger.warning(f"文件名重复，已重命名为 {new_path.name}")
     return episode_data

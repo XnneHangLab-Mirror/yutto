@@ -43,7 +43,7 @@ class UserAllFavouritesExtractor(BatchExtractor):
         username = await get_user_name(ctx, client, self.mid)
         Logger.custom(username, Badge("用户收藏夹", fore="black", back="cyan"))
 
-        ugc_video_info_list: list[tuple[UgcVideoListItem, str, int, str, str]] = []
+        ugc_video_info_list: list[tuple[UgcVideoListItem, str, int, str, str, str | None]] = []
 
         for fav in await get_all_favourites(ctx, client, self.mid):
             series_title = fav["title"]
@@ -59,7 +59,7 @@ class UserAllFavouritesExtractor(BatchExtractor):
                     favourite_title = favourite_video["title"] or ugc_video_list["title"]
                     is_single_page_video = len(ugc_video_list["pages"]) == 1
                     for ugc_video_item in ugc_video_list["pages"]:
-                        resolved_video_item, auto_subpath_template = normalize_favourite_video_item(
+                        resolved_video_item, auto_subpath_template, display_group = normalize_favourite_video_item(
                             ugc_video_item,
                             favourite_title,
                             is_single_page_video=is_single_page_video,
@@ -71,6 +71,7 @@ class UserAllFavouritesExtractor(BatchExtractor):
                                 ugc_video_list["pubdate"],
                                 series_title,
                                 auto_subpath_template,
+                                display_group,
                             )
                         )
                 except (NotFoundError, NoAccessPermissionError) as e:
@@ -92,7 +93,8 @@ class UserAllFavouritesExtractor(BatchExtractor):
                         "pubdate": pubdate,
                     },
                     auto_subpath_template,
+                    display_group=display_group,
                 )
             )
-            for ugc_video_item, title, pubdate, series_title, auto_subpath_template in ugc_video_info_list
+            for ugc_video_item, title, pubdate, series_title, auto_subpath_template, display_group in ugc_video_info_list
         ]
