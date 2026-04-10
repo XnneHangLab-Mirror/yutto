@@ -401,10 +401,6 @@ def _is_meaningless_name(name: str) -> bool:
     if not name:
         return True
 
-    # name 为 B 站自动生成的机器标题，如 video_260101_164424
-    if re.fullmatch(r"video_\d{6}_\d{6}", name):
-        return True
-
     # name 为视频文件名
     video_ext_list = [".mp4", ".flv", ".mkv", ".avi", ".wmv", ".mov", ".mpg", ".mpeg", ".ts"]
     for video_ext in video_ext_list:

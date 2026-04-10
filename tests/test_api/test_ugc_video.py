@@ -72,7 +72,7 @@ async def test_get_ugc_video_list():
 
 
 @as_sync
-async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypatch: pytest.MonkeyPatch):
+async def test_get_ugc_video_list_keeps_machine_generated_page_name(monkeypatch: pytest.MonkeyPatch):
     avid = BvId("BV1vZ4y1M7mQ")
     client = cast("AsyncClient", object())
     page_name = "video_260101_164424"
@@ -124,8 +124,8 @@ async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypat
 
     ugc_video_list = await ugc_video_module.get_ugc_video_list(FetcherContext(), client, avid)
 
-    assert ugc_video_list["pages"][0]["name"] == "真实标题_P01"
-    assert ugc_video_list["pages"][0]["metadata"]["title"] == "真实标题_P01"
+    assert ugc_video_list["pages"][0]["name"] == page_name
+    assert ugc_video_list["pages"][0]["metadata"]["title"] == page_name
 
 
 @pytest.mark.api
