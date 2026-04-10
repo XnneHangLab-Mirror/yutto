@@ -151,7 +151,15 @@ async def get_ugc_video_list(ctx: FetcherContext, client: AsyncClient, avid: AvI
         return result
 
     # 对无意义的分 p 视频名进行修改
+    is_single_page_video = len(res_json["data"]) == 1
     for i, (item, page_info) in enumerate(zip(cast("list[Any]", res_json["data"]), video_info["pages"], strict=True)):
+        # 单 P 视频更接近单视频入口语义，优先使用主标题而不是分页标题。
+        if is_single_page_video and (item["part"] != video_title or page_info["part"] != video_title):
+            page_title = f"{video_title}_P{i + 1:02}"
+            item["part"] = page_title
+            page_info["part"] = page_title
+            continue
+
         # TODO: 这里 part 出现了两次，需要都修改，后续去除其中一个冗余数据
         if _is_meaningless_name(item["part"]):
             item["part"] = f"{video_title}_P{i + 1:02}"
