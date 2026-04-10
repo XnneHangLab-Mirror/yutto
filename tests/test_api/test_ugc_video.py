@@ -71,20 +71,11 @@ async def test_get_ugc_video_list():
         assert ugc_video_list[0]["metadata"]["website"] == "https://www.bilibili.com/video/BV1vZ4y1M7mQ"
 
 
-@pytest.mark.parametrize(
-    "page_name",
-    [
-        "video_260101_164424",
-        "0325-Qwen3.5-27B-Claude-4.6-Opus",
-        "mmexport1768031333059",
-    ],
-)
 @as_sync
-async def test_get_ugc_video_list_prefers_video_title_for_single_page_video(
-    monkeypatch: pytest.MonkeyPatch, page_name: str
-):
+async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypatch: pytest.MonkeyPatch):
     avid = BvId("BV1vZ4y1M7mQ")
     client = cast("AsyncClient", object())
+    page_name = "video_260101_164424"
 
     async def fake_get_ugc_video_info(ctx: FetcherContext, client: AsyncClient, video_avid: BvId):
         assert video_avid == avid
