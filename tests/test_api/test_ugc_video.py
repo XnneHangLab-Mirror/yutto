@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 import pytest
 
+import yutto.api.ugc_video as ugc_video_module
 from yutto.api.ugc_video import (
     get_ugc_video_info,
     get_ugc_video_list,
@@ -11,6 +14,9 @@ from yutto.api.ugc_video import (
 from yutto.types import AId, BvId, CId, EpisodeId
 from yutto.utils.fetcher import FetcherContext, create_client
 from yutto.utils.functional import as_sync
+
+if TYPE_CHECKING:
+    from httpx import AsyncClient
 
 
 @pytest.mark.api
@@ -63,6 +69,62 @@ async def test_get_ugc_video_list():
         assert ugc_video_list[1]["metadata"] is not None
         assert ugc_video_list[1]["metadata"]["title"] == "bilili 环境配置方法"
         assert ugc_video_list[0]["metadata"]["website"] == "https://www.bilibili.com/video/BV1vZ4y1M7mQ"
+
+
+@as_sync
+async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypatch: pytest.MonkeyPatch):
+    avid = BvId("BV1vZ4y1M7mQ")
+    client = cast("AsyncClient", object())
+
+    async def fake_get_ugc_video_info(ctx: FetcherContext, client: AsyncClient, video_avid: BvId):
+        assert video_avid == avid
+        return {
+            "avid": avid,
+            "aid": avid.as_aid(),
+            "bvid": avid,
+            "episode_id": EpisodeId(""),
+            "is_bangumi": False,
+            "cid": CId("222190584"),
+            "picture": "https://example.com/cover.jpg",
+            "title": "真实标题",
+            "pubdate": 1710000000,
+            "description": "desc",
+            "pages": [
+                {
+                    "part": "video_260101_164424",
+                    "first_frame": None,
+                }
+            ],
+            "genre": [],
+            "actor": [],
+            "tag": [],
+        }
+
+    async def fake_fetch_json(
+        ctx: FetcherContext,
+        client: AsyncClient,
+        url: str,
+        *,
+        params: dict[str, str] | None = None,
+    ):
+        assert "x/player/pagelist" in url
+        assert params is None
+        return {
+            "data": [
+                {
+                    "cid": 222190584,
+                    "part": "video_260101_164424",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ugc_video_module, "get_ugc_video_info", fake_get_ugc_video_info)
+    monkeypatch.setattr(ugc_video_module.Fetcher, "fetch_json", fake_fetch_json)
+
+    ugc_video_list = await ugc_video_module.get_ugc_video_list(FetcherContext(), client, avid)
+
+    assert ugc_video_list["pages"][0]["name"] == "真实标题_P01"
+    assert ugc_video_list["pages"][0]["metadata"]["title"] == "真实标题_P01"
 
 
 @pytest.mark.api
