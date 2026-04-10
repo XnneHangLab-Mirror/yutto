@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from yutto.api.user_info import encode_wbi, get_wbi_img
 from yutto.exceptions import NotLoginError
-from yutto.types import BvId, FavouriteMetaData, FId
+from yutto.types import BvId, FavouriteMetaData, FavouriteVideoData, FId
 from yutto.utils.console.logger import Logger
 from yutto.utils.fetcher import Fetcher
 
@@ -77,6 +77,39 @@ async def get_favourite_avids(ctx: FetcherContext, client: AsyncClient, fid: FId
     json_data = await Fetcher.fetch_json(ctx, client, api.format(fid=fid))
     assert json_data is not None
     return [BvId(video_info["bvid"]) for video_info in json_data["data"]]
+
+
+async def get_favourite_items(ctx: FetcherContext, client: AsyncClient, fid: FId) -> list[FavouriteVideoData]:
+    api = "https://api.bilibili.com/x/v3/fav/resource/list?media_id={fid}&pn={pn}&ps={ps}&platform=web"
+    ps = 20
+    pn = 1
+    favourite_items: list[FavouriteVideoData] = []
+
+    while True:
+        json_data = await Fetcher.fetch_json(ctx, client, api.format(fid=fid, pn=pn, ps=ps))
+        assert json_data is not None
+        data = cast("dict[str, Any]", json_data["data"])
+        medias = cast("list[dict[str, Any]]", data["medias"] or [])
+        favourite_items.extend(
+            FavouriteVideoData(
+                avid=BvId(media["bvid"]),
+                title=str(media["title"]),
+                page=int(media["page"]),
+            )
+            for media in medias
+            if media.get("type") == 2 and media.get("bvid")
+        )
+
+        has_more = data.get("has_more")
+        if has_more is not None:
+            if not has_more:
+                break
+        elif len(medias) < ps:
+            break
+
+        pn += 1
+
+    return favourite_items
 
 
 # 个人空间·收藏夹·全部

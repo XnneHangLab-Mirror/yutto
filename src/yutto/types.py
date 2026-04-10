@@ -272,6 +272,12 @@ class FavouriteMetaData(TypedDict):
     title: str
 
 
+class FavouriteVideoData(TypedDict):
+    avid: AvId
+    title: str
+    page: int
+
+
 class UserInfo(TypedDict):
     vip_status: bool
     is_login: bool
