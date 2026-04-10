@@ -71,8 +71,18 @@ async def test_get_ugc_video_list():
         assert ugc_video_list[0]["metadata"]["website"] == "https://www.bilibili.com/video/BV1vZ4y1M7mQ"
 
 
+@pytest.mark.parametrize(
+    "page_name",
+    [
+        "video_260101_164424",
+        "0325-Qwen3.5-27B-Claude-4.6-Opus",
+        "mmexport1768031333059",
+    ],
+)
 @as_sync
-async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypatch: pytest.MonkeyPatch):
+async def test_get_ugc_video_list_prefers_video_title_for_single_page_video(
+    monkeypatch: pytest.MonkeyPatch, page_name: str
+):
     avid = BvId("BV1vZ4y1M7mQ")
     client = cast("AsyncClient", object())
 
@@ -91,7 +101,7 @@ async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypat
             "description": "desc",
             "pages": [
                 {
-                    "part": "video_260101_164424",
+                    "part": page_name,
                     "first_frame": None,
                 }
             ],
@@ -113,7 +123,7 @@ async def test_get_ugc_video_list_replaces_machine_generated_page_name(monkeypat
             "data": [
                 {
                     "cid": 222190584,
-                    "part": "video_260101_164424",
+                    "part": page_name,
                 }
             ]
         }
