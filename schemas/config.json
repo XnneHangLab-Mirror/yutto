@@ -36,6 +36,12 @@
           "title": "Num Workers",
           "type": "integer"
         },
+        "fetch_workers": {
+          "default": 8,
+          "exclusiveMinimum": 0,
+          "title": "Fetch Workers",
+          "type": "integer"
+        },
         "video_quality": {
           "default": 127,
           "enum": [
@@ -172,6 +178,11 @@
           ],
           "default": null,
           "title": "Tmp Dir"
+        },
+        "ffmpeg_path": {
+          "default": "ffmpeg",
+          "title": "Ffmpeg Path",
+          "type": "string"
         },
         "sessdata": {
           "default": "",
@@ -399,6 +410,11 @@
           "default": false,
           "title": "Save Cover",
           "type": "boolean"
+        },
+        "skip_download": {
+          "default": false,
+          "title": "Skip Download",
+          "type": "boolean"
         }
       },
       "title": "YuttoResourceSettings",
@@ -410,6 +426,7 @@
       "$ref": "#/$defs/YuttoBasicSettings",
       "default": {
         "num_workers": 8,
+        "fetch_workers": 8,
         "video_quality": 127,
         "audio_quality": 30251,
         "vcodec": "avc:copy",
@@ -424,6 +441,7 @@
         "proxy": "auto",
         "dir": "./",
         "tmp_dir": null,
+        "ffmpeg_path": "ffmpeg",
         "sessdata": "",
         "subpath_template": "{auto}",
         "aliases": {},
@@ -447,7 +465,8 @@
         "require_metadata": false,
         "require_cover": true,
         "require_chapter_info": true,
-        "save_cover": false
+        "save_cover": false,
+        "skip_download": false
       }
     },
     "danmaku": {
