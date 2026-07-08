@@ -5,16 +5,13 @@ import re
 from typing import TYPE_CHECKING
 
 from yutto.api.space import get_favourite_info, get_favourite_items, get_user_name
-from yutto.api.ugc_video import get_ugc_video_list
-from yutto.exceptions import NoAccessPermissionError, NotFoundError
 from yutto.extractor._abc import BatchExtractor
+from yutto.extractor._batch import resolve_ugc_video_lists
 from yutto.extractor._favourite import normalize_favourite_video_item
 from yutto.extractor.common import extract_ugc_video_data
 from yutto.types import FId, MId
 from yutto.utils.asynclib import CoroutineWrapper
 from yutto.utils.console.logger import Badge, Logger
-from yutto.utils.fetcher import Fetcher
-from yutto.utils.filter import Filter
 
 if TYPE_CHECKING:
     import httpx
@@ -51,36 +48,31 @@ class FavouritesExtractor(BatchExtractor):
 
         ugc_video_info_list: list[tuple[UgcVideoListItem, str, int, str, str | None]] = []
 
-        for favourite_video in await get_favourite_items(ctx, client, self.fid):
-            avid = favourite_video["avid"]
-            try:
-                ugc_video_list = await get_ugc_video_list(ctx, client, avid)
-                # 在使用 SESSDATA 时，如果不去事先 touch 一下视频链接的话，是无法获取 episode_data 的
-                # 至于为什么前面那俩（投稿视频页和番剧页）不需要额外 touch，因为在 get_redirected_url 阶段连接过了呀
-                if not Filter.verify_timer(ugc_video_list["pubdate"]):
-                    Logger.debug(f"因为发布时间为 {ugc_video_list['pubdate']}，跳过 {ugc_video_list['title']}")
-                    continue
-                await Fetcher.touch_url(ctx, client, avid.to_url())
-                favourite_title = favourite_video["title"] or ugc_video_list["title"]
-                is_single_page_video = len(ugc_video_list["pages"]) == 1
-                for ugc_video_item in ugc_video_list["pages"]:
-                    resolved_video_item, auto_subpath_template, display_group = normalize_favourite_video_item(
-                        ugc_video_item,
-                        favourite_title,
-                        is_single_page_video=is_single_page_video,
-                    )
-                    ugc_video_info_list.append(
-                        (
-                            resolved_video_item,
-                            favourite_title,
-                            ugc_video_list["pubdate"],
-                            auto_subpath_template,
-                            display_group,
-                        )
-                    )
-            except (NotFoundError, NoAccessPermissionError) as e:
-                Logger.error(e.message)
+        favourite_videos = await get_favourite_items(ctx, client, self.fid)
+        ugc_video_lists = await resolve_ugc_video_lists(
+            ctx, client, [favourite_video["avid"] for favourite_video in favourite_videos]
+        )
+
+        for favourite_video, ugc_video_list in zip(favourite_videos, ugc_video_lists, strict=True):
+            if ugc_video_list is None:
                 continue
+            favourite_title = favourite_video["title"] or ugc_video_list["title"]
+            is_single_page_video = len(ugc_video_list["pages"]) == 1
+            for ugc_video_item in ugc_video_list["pages"]:
+                resolved_video_item, auto_subpath_template, display_group = normalize_favourite_video_item(
+                    ugc_video_item,
+                    favourite_title,
+                    is_single_page_video=is_single_page_video,
+                )
+                ugc_video_info_list.append(
+                    (
+                        resolved_video_item,
+                        favourite_title,
+                        ugc_video_list["pubdate"],
+                        auto_subpath_template,
+                        display_group,
+                    )
+                )
 
         return [
             CoroutineWrapper(

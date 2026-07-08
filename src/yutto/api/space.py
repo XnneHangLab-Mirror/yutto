@@ -59,6 +59,7 @@ async def get_user_name(ctx: FetcherContext, client: AsyncClient, mid: MId) -> s
         Logger.error(
             f"获取用户名失败了呢，错误信息：{user_info['message']}，可尝试检查 `--auth` 参数正确性或者通过 `yutto auth login` 登录账号后重试～"
         )
+        return f"「用户{mid}」"
     return user_info["data"]["name"]
 
 

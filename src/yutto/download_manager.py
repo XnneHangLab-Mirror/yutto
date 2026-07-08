@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from asyncio import Queue
 from dataclasses import dataclass
 from pathlib import Path
@@ -116,7 +117,7 @@ class DownloadManager:
         await self.queue.put(Nothing)
 
     async def loop(self, ctx: FetcherContext):
-        ctx.set_fetch_semaphore(fetch_workers=8)
+        ctx.set_fetch_semaphore(fetch_workers=ctx.fetch_workers)
         async with create_client(
             cookies=ctx.cookies,
             trust_env=ctx.trust_env,
@@ -191,6 +192,7 @@ class DownloadManager:
         # 提取信息，构造解析任务～
         for extractor in extractors:
             if extractor.match(url):
+                extract_start_time = time.time()
                 download_list = await extractor(
                     ctx,
                     client,
@@ -209,6 +211,11 @@ class DownloadManager:
                         ai_translation_language=args.ai_translation_language,
                     ),
                 )
+                if args.batch:
+                    Logger.custom(
+                        f"共 {len(download_list)} 项，列表解析耗时 {time.time() - extract_start_time:.2f} 秒",
+                        Badge("解析", fore="black", back="cyan"),
+                    )
                 break
         else:
             if args.batch:
