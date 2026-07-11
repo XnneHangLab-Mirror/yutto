@@ -54,6 +54,7 @@ Use `just run -- ...` or `uv run python -m yutto ...` for local CLI testing. Do 
 
 ## Commit and PR conventions
 
+- Read `GOTCHAS.md` first — especially before referencing upstream (`yutto-dev/yutto`) issues/PRs in commits, PR bodies, or comments, and before passing body files to `gh` on Windows.
 - Prefer commit titles and PR titles in the `<gitmoji> <type>: <subject>` style described in `CONTRIBUTING.md`.
 - Reuse the type vocabulary implied by `.github/PULL_REQUEST_TEMPLATE.md` and keep the subject focused on the actual repo change.
 - Fill in the PR template sections and check the relevant type boxes instead of replacing the template with free-form text.
