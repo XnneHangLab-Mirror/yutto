@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 from yutto.api.collection import get_collection_details
 from yutto.api.space import get_user_name
 from yutto.extractor._abc import BatchExtractor
-from yutto.extractor._batch import resolve_ugc_video_lists
 from yutto.extractor.common import extract_ugc_video_data
+from yutto.extractor.utils.batch import resolve_ugc_video_lists
 from yutto.input_parser import parse_episodes_selection
 from yutto.types import MId, SeriesId
 from yutto.utils.asynclib import CoroutineWrapper

@@ -76,7 +76,7 @@ async def extract_bangumi_data(
         metadata = bangumi_info["metadata"] if options["require_metadata"] else None
         cover_link = bangumi_info["metadata"]["thumb"] if options["require_cover"] else None
         cover_data = (
-            await Fetcher.fetch_bin(ctx, client, bangumi_info["metadata"]["thumb"])
+            (await Fetcher.fetch_bin(ctx, client, bangumi_info["metadata"]["thumb"])).value_or(None)
             if options["require_cover"]
             else None
         )
@@ -107,7 +107,6 @@ async def extract_bangumi_data(
             cover_link=cover_link,
             chapter_info_data=[],
             path=path_obj,
-            display_name=path_obj.name,
             display_group=None,
         )
     except (NoAccessPermissionError, HttpStatusError, UnSupportedTypeError, NotFoundError) as e:
@@ -143,7 +142,9 @@ async def extract_cheese_data(
         metadata = cheese_info["metadata"] if options["require_metadata"] else None
         cover_link = cheese_info["metadata"]["thumb"] if options["require_cover"] else None
         cover_data = (
-            await Fetcher.fetch_bin(ctx, client, cheese_info["metadata"]["thumb"]) if options["require_cover"] else None
+            (await Fetcher.fetch_bin(ctx, client, cheese_info["metadata"]["thumb"])).value_or(None)
+            if options["require_cover"]
+            else None
         )
         subpath_variables_base: PathTemplateVariableDict = {
             "id": id,
@@ -172,7 +173,6 @@ async def extract_cheese_data(
             cover_link=cover_link,
             chapter_info_data=[],
             path=path_obj,
-            display_name=path_obj.name,
             display_group=None,
         )
     except (NoAccessPermissionError, HttpStatusError, UnSupportedTypeError, NotFoundError) as e:
@@ -213,7 +213,7 @@ async def extract_ugc_video_data(
             attach_chapter_info(metadata, chapter_info_data)
         cover_link = ugc_video_info["metadata"]["thumb"] if options["require_cover"] else None
         cover_data = (
-            await Fetcher.fetch_bin(ctx, client, ugc_video_info["metadata"]["thumb"])
+            (await Fetcher.fetch_bin(ctx, client, ugc_video_info["metadata"]["thumb"])).value_or(None)
             if options["require_cover"]
             else None
         )
@@ -252,7 +252,6 @@ async def extract_ugc_video_data(
             cover_link=cover_link,
             chapter_info_data=chapter_info_data,
             path=path_obj,
-            display_name=path_obj.name,
             display_group=display_group,
         )
     except (NoAccessPermissionError, HttpStatusError, UnSupportedTypeError, NotFoundError) as e:

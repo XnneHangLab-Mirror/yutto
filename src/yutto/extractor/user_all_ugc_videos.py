@@ -5,11 +5,12 @@ from typing import TYPE_CHECKING
 
 from yutto.api.space import get_user_name, get_user_space_all_videos_avids
 from yutto.extractor._abc import BatchExtractor
-from yutto.extractor._batch import resolve_ugc_video_lists
 from yutto.extractor.common import extract_ugc_video_data
+from yutto.extractor.utils.batch import resolve_ugc_video_lists
 from yutto.types import MId
 from yutto.utils.asynclib import CoroutineWrapper
 from yutto.utils.console.logger import Badge, Logger
+from yutto.utils.filter import Filter
 
 if TYPE_CHECKING:
     import httpx
@@ -40,7 +41,13 @@ class UserAllUgcVideosExtractor(BatchExtractor):
         Logger.custom(username, Badge("UP 主投稿视频", fore="black", back="cyan"))
 
         ugc_video_info_list: list[tuple[UgcVideoListItem, str, int]] = []
-        avids = await get_user_space_all_videos_avids(ctx, client, self.mid)
+        avids = await get_user_space_all_videos_avids(
+            ctx,
+            client,
+            self.mid,
+            pubdate_filter=Filter.verify_timer,
+            stop_before_timestamp=int(Filter.batch_filter_start_time.timestamp()),
+        )
         for ugc_video_list in await resolve_ugc_video_lists(ctx, client, avids):
             if ugc_video_list is None:
                 continue

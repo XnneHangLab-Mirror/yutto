@@ -4,7 +4,7 @@ import asyncio
 import os
 import re
 from enum import Enum
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from yutto.downloader.progressbar import show_progress
 from yutto.downloader.selector import select_audio, select_video
@@ -13,7 +13,7 @@ from yutto.utils.asynclib import CoroutineWrapper, first_successful_with_check
 from yutto.utils.console.colorful import colored_string
 from yutto.utils.console.logger import Badge, Logger
 from yutto.utils.danmaku import write_danmaku
-from yutto.utils.fetcher import Fetcher
+from yutto.utils.fetcher import Fetcher, unwrap_fetch_result
 from yutto.utils.ffmpeg import FFmpeg, FFmpegCommandBuilder
 from yutto.utils.file_buffer import AsyncFileBuffer
 from yutto.utils.functional import filter_none_values, xmerge
@@ -124,10 +124,14 @@ async def download_video_and_audio(
     coroutines_list: list[list[CoroutineWrapper[None]]] = []
     mirrors_filter = create_mirrors_filter(options["banned_mirrors_pattern"])
     ctx.set_download_semaphore(options["num_workers"])
+
+    async def get_size(url: str) -> int | None:
+        return unwrap_fetch_result(await Fetcher.get_size(ctx, client, url))
+
     if video is not None:
         vbuf = await AsyncFileBuffer(video_path, overwrite=options["overwrite"])
         vsize = await first_successful_with_check(
-            [Fetcher.get_size(ctx, client, url) for url in [video["url"], *mirrors_filter(video["mirrors"])]]
+            [get_size(url) for url in [video["url"], *mirrors_filter(video["mirrors"])]]
         )
         video_coroutines = [
             CoroutineWrapper(
@@ -149,7 +153,7 @@ async def download_video_and_audio(
     if audio is not None:
         abuf = await AsyncFileBuffer(audio_path, overwrite=options["overwrite"])
         asize = await first_successful_with_check(
-            [Fetcher.get_size(ctx, client, url) for url in [audio["url"], *mirrors_filter(audio["mirrors"])]]
+            [get_size(url) for url in [audio["url"], *mirrors_filter(audio["mirrors"])]]
         )
         audio_coroutines = [
             CoroutineWrapper(
@@ -329,25 +333,27 @@ async def process_download(
     # 显示音视频详细信息
     show_videos_info(
         videos,
-        videos.index(cast("VideoUrlMeta", video)) if will_download_video else -1,
+        videos.index(video) if will_download_video else -1,
     )
     show_audios_info(
         audios,
-        audios.index(cast("AudioUrlMeta", audio)) if will_download_audio else -1,
+        audios.index(audio) if will_download_audio else -1,
     )
 
     output_format = ".mp4"
     if not will_download_video:
         if options["output_format_audio_only"] != "infer":
             output_format = "." + options["output_format_audio_only"]
-        elif will_download_audio and cast("AudioUrlMeta", audio)["codec"] == "flac":
+        elif will_download_audio and audio["codec"] == "flac" and options["audio_save_codec"] in {"copy", "flac"}:
             output_format = ".flac"
+        elif will_download_audio and audio["codec"] == "eac3" and options["audio_save_codec"] in {"copy", "eac3"}:
+            output_format = ".mkv"  # m4a/ipod does not support EAC3 passthrough
         else:
             output_format = ".m4a"
     else:
         if options["output_format"] != "infer":
             output_format = "." + options["output_format"]
-        elif will_download_audio and cast("AudioUrlMeta", audio)["codec"] == "flac":
+        elif will_download_audio and audio["codec"] == "flac":
             output_format = ".mkv"  # MP4 does not support FLAC audio
 
     output_path = output_dir.joinpath(filename + output_format)

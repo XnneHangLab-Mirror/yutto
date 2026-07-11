@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from yutto.extractor._favourite import (
+from yutto.extractor.utils.favourite import (
     FAVOURITE_MULTI_PAGE_TEMPLATE,
     FAVOURITE_SINGLE_PAGE_TEMPLATE,
     normalize_favourite_video_item,
@@ -62,7 +62,7 @@ def test_normalize_favourite_video_item_uses_favourite_title_for_single_page_vid
     assert display_group is None
 
 
-def test_normalize_favourite_video_item_prefixes_multi_page_video_name():
+def test_normalize_favourite_video_item_keeps_multi_page_video_name():
     ugc_video_item = build_ugc_video_item("手机端添加分p", id=2)
 
     resolved_item, auto_subpath_template, display_group = normalize_favourite_video_item(
@@ -71,8 +71,8 @@ def test_normalize_favourite_video_item_prefixes_multi_page_video_name():
         is_single_page_video=False,
     )
 
-    assert resolved_item["name"] == "P02_手机端添加分p"
-    assert resolved_item["metadata"]["title"] == "P02_手机端添加分p"
-    assert resolved_item["metadata"]["show_title"] == "P02_手机端添加分p"
+    # 多分 p 视频保持原分 p 名（机器生成名的规范化已在 get_ugc_video_list 层完成），
+    # 收藏夹人工标题仅作为分组名（display_group）展示
+    assert resolved_item["name"] == "手机端添加分p"
     assert auto_subpath_template == FAVOURITE_MULTI_PAGE_TEMPLATE
     assert display_group == "收藏夹多 P 标题"

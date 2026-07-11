@@ -23,7 +23,6 @@ def build_episode_data(*, display_name: str, display_group: str | None) -> Episo
             "cover_link": None,
             "chapter_info_data": [],
             "path": Path(display_name),
-            "display_name": display_name,
             "display_group": display_group,
         },
     )
