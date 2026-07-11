@@ -3,7 +3,7 @@ name = "uiya-yutto"
 version = "0.0.5"
 description = "🧊 一个可爱且任性的 B 站视频下载器"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
 keywords = ["python", "bilibili", "video", "downloader", "danmaku"]
 license = "GPL-3.0-only"
@@ -14,7 +14,6 @@ classifiers = [
   "Typing :: Typed",
   "Programming Language :: Python",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -28,7 +27,6 @@ dependencies = [
   "typing-extensions>=4.15.0",
   "dict2xml>=1.7.8",
   "httpx[http2,socks]>=0.28.1",
-  "tomli>=2.3.0; python_version < '3.11'",
   "pydantic>=2.12.5",
   "returns>=0.26.0",
   "segno>=1.6.6",
@@ -45,14 +43,13 @@ yutto = "yutto.__main__:main"
 
 [dependency-groups]
 dev = [
-  "pyright>=1.1.408",
-  "ruff>=0.15.0",
-  "typos>=1.43.3",
-  "pytest>=9.0.2",
-  "pytest-rerunfailures>=16.1",
-  "syrupy>=5.1.0",
-  "pytest-codspeed>=4.2.0",
-  "tomli>=2.3.0; python_version >= '3.11'",
+  "ty>=0.0.56",
+  "ruff>=0.15.20",
+  "typos>=1.48.0",
+  "pytest>=9.1.1",
+  "pytest-rerunfailures>=16.4",
+  "syrupy>=5.4.0",
+  "pytest-codspeed>=5.0.3",
 ]
 
 [tool.uv.sources]
@@ -61,17 +58,12 @@ biliass = { workspace = true }
 [tool.uv.workspace]
 members = ["packages/*"]
 
-[tool.pytest.ini_options]
+[tool.pytest]
 markers = ["api", "e2e", "processor", "biliass", "ignore", "ci_skip", "ci_only"]
-
-[tool.pyright]
-include = ["src/yutto", "packages/biliass/src/biliass", "tests"]
-pythonVersion = "3.10"
-typeCheckingMode = "strict"
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -113,8 +105,6 @@ select = [
 ]
 ignore = [
   "E501", # line too long, duplicate with ruff fmt
-  "F401", # imported but unused, duplicate with pyright
-  "F841", # local variable is assigned to but never used, duplicate with pyright
 ]
 future-annotations = true
 

@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 import random
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 from urllib.parse import quote, unquote, urlparse
 
 import h2.exceptions
 import httpx
+from returns.result import Failure, Result, Success
 from typing_extensions import ParamSpec
 
 from yutto.exceptions import MaxRetryError
@@ -39,12 +40,12 @@ class MaxRetry:
 
     def __call__(
         self, connect_once: Callable[InputT, Coroutine[Any, Any, RetT]]
-    ) -> Callable[InputT, Coroutine[Any, Any, RetT]]:
-        async def connect_n_times(*args: InputT.args, **kwargs: InputT.kwargs) -> RetT:
+    ) -> Callable[InputT, Coroutine[Any, Any, Result[RetT, MaxRetryError]]]:
+        async def connect_n_times(*args: InputT.args, **kwargs: InputT.kwargs) -> Result[RetT, MaxRetryError]:
             retry = self.max_retry + 1
             while retry:
                 try:
-                    return await connect_once(*args, **kwargs)
+                    return Success(await connect_once(*args, **kwargs))
                 except httpx.TimeoutException:
                     Logger.warning(f"抓取超时，正在重试，剩余 {retry - 1} 次")
                 except (httpx.InvalidURL, httpx.UnsupportedProtocol) as e:
@@ -55,16 +56,25 @@ class MaxRetry:
                     Logger.warning(f"抓取失败（{error_type}），正在重试，剩余 {retry - 1} 次")
                 finally:
                     retry -= 1
-            raise MaxRetryError("超出最大重试次数！")
+            return Failure(MaxRetryError("超出最大重试次数！"))
 
         return connect_n_times
+
+
+def unwrap_fetch_result(result: Result[RetT, MaxRetryError]) -> RetT:
+    match result:
+        case Success(value):
+            return cast("RetT", value)
+        case Failure(error):
+            raise cast("MaxRetryError", error)
+    raise AssertionError("无法解析响应结果")
 
 
 DEFAULT_PROXY = None
 DEFAULT_TRUST_ENV = True
 DEFAULT_FETCH_WORKERS = 8
 DEFAULT_HEADERS: dict[str, str] = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
     "Referer": "https://www.bilibili.com",
 }
 DEFAULT_COOKIES = httpx.Cookies()
@@ -154,7 +164,7 @@ class Fetcher:
         client: AsyncClient,
         url: str,
         *,
-        params: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
         encoding: str | None = None,  # TODO(SigureMo): Support this
     ) -> str | None:
         async with ctx.fetch_guard():
@@ -173,7 +183,7 @@ class Fetcher:
         client: AsyncClient,
         url: str,
         *,
-        params: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
     ) -> bytes | None:
         async with ctx.fetch_guard():
             Logger.debug(f"Fetch bin: {url}")
@@ -191,15 +201,15 @@ class Fetcher:
         client: AsyncClient,
         url: str,
         *,
-        params: Mapping[str, str] | None = None,
-    ) -> Any | None:
+        params: Mapping[str, Any] | None = None,
+    ) -> Any:
         async with ctx.fetch_guard():
             Logger.debug(f"Fetch json: {url}")
             Logger.status.next_tick()
             resp = await client.get(url, params=params)
             if not resp.is_success:
                 Logger.warning(f"抓取失败（HTTP {resp.status_code}）：{url}")
-                return None
+                resp.raise_for_status()
             return resp.json()
 
     @staticmethod
@@ -239,7 +249,7 @@ class Fetcher:
     @MaxRetry(2)
     # 对于相同 session，同样的页面没必要重复 touch
     @async_cache(lambda args: f"client_id={id(args.arguments['client'])}, url={args.arguments['url']}")
-    async def touch_url(ctx: FetcherContext, client: AsyncClient, url: str):
+    async def touch_url(ctx: FetcherContext, client: AsyncClient, url: str) -> None:
         async with ctx.fetch_guard():
             Logger.debug(f"Touch url: {url}")
             await client.get(url)

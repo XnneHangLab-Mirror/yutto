@@ -12,7 +12,7 @@ aside: true
 - 配置项 `basic.num_workers`
 - 默认值 `8`
 
-与 bilili 不同的是，我并不是使用多线程实现并行下载，而是使用协程实现的，本参数限制的是最大的并行 Worker 数量。
+我使用协程来实现并发下载，本参数限制的是最大的并发 Worker 数量。
 
 ## 指定视频清晰度等级
 
@@ -131,7 +131,8 @@ download_vcodec_priority = ["hevc", "avc", "av1"]
 
 在仅包含音频流时所使用的输出格式，默认选值 `"infer"` 表示自动根据情况进行推导以保证输出的可用，推导规则如下：
 
-- 如果音频流编码为 `"fLaC"`，则输出格式为 `"flac"`
+- 如果音频流编码为 `"fLaC"`，且保存编码为 `"copy"`，则输出格式为 `"flac"`，因为 `"m4a"` 尚不支持 `"fLaC"` 编码
+- 如果音频流编码为 `"EAC3"`，且保存编码为 `"copy"`，则输出格式为 `"mkv"`，因为 `"m4a"` 尚不支持 `"EAC3"` 编码
 - 否则为 `"m4a"`
 
 ::: tip
@@ -160,7 +161,7 @@ B 站提供了 `xml` 与 `protobuf` 两种弹幕数据接口，`xml` 接口为�
 
 为了确保无论是否登录都能获取最多的弹幕，我在登录时会下载 `protobuf` 源数据，在未登录时会下载 `xml` 源数据，并将其转换为主流播放器支持的 `ass` 格式
 
-如果你不喜欢我自动转换的效果，可以选择输出格式为 `xml` 或 `protobuf`，手动通过一些工具进行转换，比如我和 bilili 所使用的 [biliass](https://github.com/yutto-dev/yutto/tree/main/packages/biliass)，或者使用 [us-danmaku](https://tiansh.github.io/us-danmaku/bilibili/) 进行在线转换。
+如果你不喜欢我自动转换的效果，可以选择输出格式为 `xml` 或 `protobuf`，手动通过一些工具进行转换，比如我默认使用的 [biliass](https://github.com/yutto-dev/yutto/tree/main/packages/biliass)，或者使用 [us-danmaku](https://tiansh.github.io/us-danmaku/bilibili/) 进行在线转换。
 
 如果你不想下载弹幕，只需要使用参数 `--no-danmaku` 即可。
 

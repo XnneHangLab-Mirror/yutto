@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import platform
-import sys
+import tomllib
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -14,11 +14,6 @@ from yutto.media.quality import (
 )
 from yutto.utils.console.logger import Logger
 from yutto.utils.time import TIME_DATE_FMT
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
 
 
 def xdg_config_home() -> Path:
@@ -104,11 +99,11 @@ class YuttoAuthSettings(BaseModel):
 
 
 class YuttoSettings(BaseModel):
-    basic: Annotated[YuttoBasicSettings, Field(YuttoBasicSettings())]  # pyright: ignore[reportCallIssue]
-    resource: Annotated[YuttoResourceSettings, Field(YuttoResourceSettings())]  # pyright: ignore[reportCallIssue]
-    danmaku: Annotated[YuttoDanmakuSettings, Field(YuttoDanmakuSettings())]  # pyright: ignore[reportCallIssue]
-    batch: Annotated[YuttoBatchSettings, Field(YuttoBatchSettings())]  # pyright: ignore[reportCallIssue]
-    auth: Annotated[YuttoAuthSettings, Field(YuttoAuthSettings())]  # pyright: ignore[reportCallIssue]
+    basic: Annotated[YuttoBasicSettings, Field(YuttoBasicSettings())]  # ty: ignore[missing-argument]
+    resource: Annotated[YuttoResourceSettings, Field(YuttoResourceSettings())]  # ty: ignore[missing-argument]
+    danmaku: Annotated[YuttoDanmakuSettings, Field(YuttoDanmakuSettings())]  # ty: ignore[missing-argument]
+    batch: Annotated[YuttoBatchSettings, Field(YuttoBatchSettings())]  # ty: ignore[missing-argument]
+    auth: Annotated[YuttoAuthSettings, Field(YuttoAuthSettings())]  # ty: ignore[missing-argument]
 
 
 def search_for_settings_file() -> Path | None:
@@ -126,7 +121,7 @@ def search_for_settings_file() -> Path | None:
 
 def load_settings_file(settings_file: Path) -> YuttoSettings:
     with settings_file.open("r", encoding="utf-8") as f:
-        settings_raw: Any = tomllib.loads(f.read())  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        settings_raw: Any = tomllib.loads(f.read())
     return YuttoSettings.model_validate(settings_raw)
 
 

@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from yutto.api.space import get_watch_later_avids
 from yutto.exceptions import NotLoginError
 from yutto.extractor._abc import BatchExtractor
-from yutto.extractor._batch import resolve_ugc_video_lists
 from yutto.extractor.common import extract_ugc_video_data
+from yutto.extractor.utils.batch import resolve_ugc_video_lists
 from yutto.utils.asynclib import CoroutineWrapper
 from yutto.utils.console.logger import Badge, Logger
 
