@@ -47,9 +47,10 @@ async def test_resolve_preserves_order_and_isolates_failures(monkeypatch: Any):
 
     async def fake_get_ugc_video_list(ctx: FetcherContext, client: Any, avid: AvId) -> UgcVideoList:
         await asyncio.sleep(0)
-        if avid is missing_avid:
+        # AvId 是值相等语义，比较统一使用 ==
+        if avid == missing_avid:
             raise NotFoundError(f"啊叻？视频 {avid} 不见了诶")
-        if avid is rate_limited_avid:
+        if avid == rate_limited_avid:
             raise MaxRetryError("超出最大重试次数！")
         return build_ugc_video_list(avid)
 
@@ -63,11 +64,11 @@ async def test_resolve_preserves_order_and_isolates_failures(monkeypatch: Any):
     assert len(results) == 4
     first, second, third, fourth = results
     assert first is not None
-    assert first["avid"] is ok_avid_1
+    assert first["avid"] == ok_avid_1
     assert second is None
     assert third is None
     assert fourth is not None
-    assert fourth["avid"] is ok_avid_2
+    assert fourth["avid"] == ok_avid_2
 
 
 @pytest.mark.processor
@@ -87,8 +88,20 @@ async def test_resolve_concurrency_bounded_by_fetch_semaphore(monkeypatch: Any):
             current -= 1
         return build_ugc_video_list(avid)
 
+    class GuardedFakeFetcher:
+        @staticmethod
+        async def touch_url(ctx: FetcherContext, client: Any, url: str) -> None:
+            # touch_url 与其它请求共用同一个 fetch semaphore，并发统计需要合并计算
+            nonlocal current, peak
+            async with ctx.fetch_guard():
+                current += 1
+                peak = max(peak, current)
+                await asyncio.sleep(0.01)
+                current -= 1
+            return None
+
     monkeypatch.setattr(batch_module, "get_ugc_video_list", fake_get_ugc_video_list)
-    monkeypatch.setattr(batch_module, "Fetcher", FakeFetcher)
+    monkeypatch.setattr(batch_module, "Fetcher", GuardedFakeFetcher)
 
     ctx = FetcherContext()
     ctx.set_fetch_semaphore(fetch_workers=max_workers)

@@ -23,7 +23,8 @@ async def resolve_ugc_video_lists(
     """并发解析一批视频的分 p 列表，结果顺序与 avids 一致
 
     并发在途请求数由 ctx 的 fetch_semaphore（--fetch-workers）控制；
-    单个视频解析失败或被时间过滤时以 None 占位，不会中断整个批量任务。
+    被时间过滤或解析失败（NotFoundError / NoAccessPermissionError / MaxRetryError）
+    的视频以 None 占位，不会中断整批解析，其余未预期的异常仍会向外抛出。
     """
 
     async def resolve_one(avid: AvId) -> UgcVideoList | None:
