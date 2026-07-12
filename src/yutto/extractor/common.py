@@ -73,7 +73,9 @@ def build_bangumi_info(
     return EpisodeInfo(
         avid=avid,
         cid=bangumi_info["cid"],
+        url=f"https://www.bilibili.com/bangumi/play/ep{bangumi_info['episode_id']}",
         name=bangumi_info["name"],
+        title=str(subpath_variables_base["title"]),
         cover_url=bangumi_info["metadata"]["thumb"],
         path=Path(path),
         display_group=None,
@@ -164,7 +166,9 @@ def build_cheese_info(
     return EpisodeInfo(
         avid=avid,
         cid=cheese_info["cid"],
+        url=f"https://www.bilibili.com/cheese/play/ep{cheese_info['episode_id']}",
         name=cheese_info["name"],
+        title=str(subpath_variables_base["title"]),
         cover_url=cheese_info["metadata"]["thumb"],
         path=Path(path),
         display_group=None,
@@ -264,7 +268,9 @@ def build_ugc_video_info(
     return EpisodeInfo(
         avid=avid,
         cid=ugc_video_info["cid"],
+        url=f"{avid.to_url()}?p={ugc_video_info['id']}",
         name=ugc_video_info["name"],
+        title=str(subpath_variables_base["title"]),
         cover_url=ugc_video_info["metadata"]["thumb"],
         path=Path(path),
         display_group=display_group,

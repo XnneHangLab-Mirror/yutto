@@ -55,3 +55,20 @@ class ItemResult(_ResultModel):
 
 class DownloadResult(_ResultModel):
     items: tuple[ItemResult, ...] = Field(default_factory=tuple)
+
+
+class ResolvedItem(_ResultModel):
+    """A stable, listing-time snapshot of one episode; contains no expiring data."""
+
+    avid: str
+    cid: str
+    url: str
+    name: str
+    title: str
+    cover_url: str
+    planned_path: Path
+    display_group: str | None = None
+
+
+class ResolveResult(_ResultModel):
+    items: tuple[ResolvedItem, ...] = Field(default_factory=tuple)

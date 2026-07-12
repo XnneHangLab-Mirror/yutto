@@ -234,7 +234,9 @@ class EpisodeInfo(TypedDict):
 
     avid: AvId
     cid: CId
+    url: str  # 指向该条目自身的原子 URL，可直接作为单集下载的入口
     name: str
+    title: str
     cover_url: str
     path: Path  # 模板解析出的计划路径，下载时可能因去重而调整
     display_group: str | None  # 多分 p 视频的分组标题，单集为 None
