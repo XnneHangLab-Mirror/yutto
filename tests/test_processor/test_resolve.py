@@ -35,6 +35,9 @@ def make_info(name: str, display_group: str | None = None) -> EpisodeInfo:
         "name": name,
         "title": "标题",
         "cover_url": "https://example.com/cover.jpg",
+        "uploader": "某UP主",
+        "description": "视频简介",
+        "tags": ["标签A", "标签B"],
         "path": Path(f"标题/{name}"),
         "display_group": display_group,
     }
@@ -102,6 +105,9 @@ async def test_resolve_items_lists_stable_info_without_resolving_data(monkeypatc
         cover_url="https://example.com/cover.jpg",
         planned_path=Path("标题/P1"),
         display_group="标题",
+        uploader="某UP主",
+        description="视频简介",
+        tags=("标签A", "标签B"),
     )
     assert items == [expected_item]
     # data 懒协程从未执行，且已被关闭，不会留下 un-awaited 警告
@@ -118,5 +124,8 @@ async def test_resolve_items_lists_stable_info_without_resolving_data(monkeypatc
             cover_url="https://example.com/cover.jpg",
             planned_path=Path("标题/P1"),
             display_group="标题",
+            uploader="某UP主",
+            description="视频简介",
+            tags=("标签A", "标签B"),
         ),
     ]

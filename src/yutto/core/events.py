@@ -67,6 +67,9 @@ class DownloadItemListed:
     cover_url: str
     planned_path: Path
     display_group: str | None = None
+    uploader: str = ""
+    description: str = ""
+    tags: tuple[str, ...] = ()
 
 
 DownloadEvent: TypeAlias = (

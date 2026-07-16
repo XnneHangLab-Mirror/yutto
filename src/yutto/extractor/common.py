@@ -29,7 +29,7 @@ from yutto.utils.asynclib import CoroutineWrapper
 from yutto.utils.console.logger import Logger
 from yutto.utils.danmaku import EmptyDanmakuData
 from yutto.utils.fetcher import Fetcher
-from yutto.utils.metadata import attach_chapter_info
+from yutto.utils.metadata import MetaData, attach_chapter_info
 
 if TYPE_CHECKING:
     import httpx
@@ -46,6 +46,15 @@ if TYPE_CHECKING:
     )
     from yutto.types import AvId, EpisodeId, ExtractorOptions
     from yutto.utils.fetcher import FetcherContext
+
+
+def _display_fields_from_metadata(metadata: MetaData | None) -> tuple[str, str, list[str]]:
+    """listing 元数据中用于前端展示的字段：UP 主、简介、标签。"""
+    if metadata is None:
+        return "", "", []
+    actors = metadata.get("actor") or []
+    uploader = actors[0]["name"] if actors else ""
+    return uploader, metadata.get("plot", ""), list(metadata.get("tag") or [])
 
 
 def build_bangumi_info(
@@ -70,6 +79,7 @@ def build_bangumi_info(
     }
     subpath_variables_base.update(subpath_variables)
     path = resolve_path_template(options["subpath_template"], auto_subpath_template, subpath_variables_base)
+    uploader, description, tags = _display_fields_from_metadata(bangumi_info["metadata"])
     return EpisodeInfo(
         avid=avid,
         cid=bangumi_info["cid"],
@@ -77,6 +87,9 @@ def build_bangumi_info(
         name=bangumi_info["name"],
         title=str(subpath_variables_base["title"]),
         cover_url=bangumi_info["metadata"]["thumb"],
+        uploader=uploader,
+        description=description,
+        tags=tags,
         path=Path(path),
         display_group=None,
     )
@@ -163,6 +176,7 @@ def build_cheese_info(
     }
     subpath_variables_base.update(subpath_variables)
     path = resolve_path_template(options["subpath_template"], auto_subpath_template, subpath_variables_base)
+    uploader, description, tags = _display_fields_from_metadata(cheese_info["metadata"])
     return EpisodeInfo(
         avid=avid,
         cid=cheese_info["cid"],
@@ -170,6 +184,9 @@ def build_cheese_info(
         name=cheese_info["name"],
         title=str(subpath_variables_base["title"]),
         cover_url=cheese_info["metadata"]["thumb"],
+        uploader=uploader,
+        description=description,
+        tags=tags,
         path=Path(path),
         display_group=None,
     )
@@ -265,6 +282,7 @@ def build_ugc_video_info(
     }
     subpath_variables_base.update(subpath_variables)
     path = resolve_path_template(options["subpath_template"], auto_subpath_template, subpath_variables_base)
+    uploader, description, tags = _display_fields_from_metadata(ugc_video_info["metadata"])
     return EpisodeInfo(
         avid=avid,
         cid=ugc_video_info["cid"],
@@ -272,6 +290,9 @@ def build_ugc_video_info(
         name=ugc_video_info["name"],
         title=str(subpath_variables_base["title"]),
         cover_url=ugc_video_info["metadata"]["thumb"],
+        uploader=uploader,
+        description=description,
+        tags=tags,
         path=Path(path),
         display_group=display_group,
     )

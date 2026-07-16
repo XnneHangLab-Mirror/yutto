@@ -141,6 +141,9 @@ class DownloadManager:
                 cover_url=info["cover_url"],
                 planned_path=info["path"],
                 display_group=info["display_group"],
+                uploader=info["uploader"],
+                description=info["description"],
+                tags=tuple(info["tags"]),
             )
             emit_download_event(
                 DownloadItemListed(
@@ -152,6 +155,9 @@ class DownloadManager:
                     cover_url=item.cover_url,
                     planned_path=item.planned_path,
                     display_group=item.display_group,
+                    uploader=item.uploader,
+                    description=item.description,
+                    tags=item.tags,
                 )
             )
             items.append(item)

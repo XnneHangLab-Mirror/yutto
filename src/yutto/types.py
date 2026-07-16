@@ -238,6 +238,9 @@ class EpisodeInfo(TypedDict):
     name: str
     title: str
     cover_url: str
+    uploader: str  # UP 主名称，listing 元数据缺失时为空串
+    description: str  # 视频简介，listing 元数据缺失时为空串
+    tags: list[str]
     path: Path  # 模板解析出的计划路径，下载时可能因去重而调整
     display_group: str | None  # 多分 p 视频的分组标题，单集为 None
 

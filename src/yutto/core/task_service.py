@@ -195,6 +195,9 @@ def _encode_runtime_event(event: DownloadEvent) -> tuple[str, dict[str, object]]
             cover_url=cover_url,
             planned_path=planned_path,
             display_group=display_group,
+            uploader=uploader,
+            description=description,
+            tags=tags,
         ):
             return "item_listed", {
                 "avid": avid,
@@ -205,6 +208,9 @@ def _encode_runtime_event(event: DownloadEvent) -> tuple[str, dict[str, object]]
                 "cover_url": cover_url,
                 "planned_path": planned_path.as_posix(),
                 "display_group": display_group,
+                "uploader": uploader,
+                "description": description,
+                "tags": list(tags),
             }
         case _ as unreachable:
             assert_never(unreachable)
