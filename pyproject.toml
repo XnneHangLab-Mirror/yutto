@@ -1,6 +1,6 @@
 [project]
-name = "yutto"
-version = "2.2.0"
+name = "uiya-yutto"
+version = "0.2.0"
 description = "🧊 一个可爱且任性的 B 站视频下载器"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -123,3 +123,6 @@ runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 [build-system]
 requires = ["uv_build>=0.11.0,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "yutto"
