@@ -55,6 +55,16 @@ def test_download_parser_accepts_auth_file(tmp_path: Path):
     assert args.auth_file == auth_file
 
 
+def test_download_parser_accepts_ffmpeg_path():
+    parser = make_download_parser()
+    # 默认从 PATH 解析（与上游一致）；显式指定则透传具体路径
+    assert parser.parse_args(["https://example.com"]).ffmpeg_path == "ffmpeg"
+    assert (
+        parser.parse_args(["https://example.com", "--ffmpeg-path", "/opt/ffmpeg/ffmpeg"]).ffmpeg_path
+        == "/opt/ffmpeg/ffmpeg"
+    )
+
+
 def test_download_parser_rejects_auth_config(tmp_path: Path):
     auth_file = tmp_path / "auth.toml"
 
