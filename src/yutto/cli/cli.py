@@ -84,6 +84,11 @@ def cli() -> argparse.ArgumentParser:
 def add_serve_arguments(parser: argparse.ArgumentParser, settings: YuttoSettings) -> None:
     parser.set_defaults(server_settings=settings)
     parser.add_argument("--config", help="配置文件路径")
+    parser.add_argument(
+        "--ffmpeg-path",
+        default="ffmpeg",
+        help="FFmpeg 可执行文件路径，默认从 PATH 解析（`ffmpeg`）",
+    )
     parser.add_argument("--host", default="127.0.0.1", help="监听地址（仅允许本机回环地址）")
     parser.add_argument("--port", type=int, default=11223, help="监听端口，默认为 11223")
     parser.add_argument(
