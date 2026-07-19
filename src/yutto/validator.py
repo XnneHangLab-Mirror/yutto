@@ -91,7 +91,8 @@ def initial_validation(ctx: FetcherContext, args: argparse.Namespace):
 def validate_basic_arguments(args: argparse.Namespace):
     """检查 argparse 无法检查的选项，并设置某些全局的状态"""
 
-    ffmpeg = FFmpeg()
+    # 必须是进程内第一次 FFmpeg 实例化（单例会将此路径锁定给后续无参调用）。
+    ffmpeg = FFmpeg(args.ffmpeg_path)
 
     # fetch_workers 检查
     if args.fetch_workers < 1:

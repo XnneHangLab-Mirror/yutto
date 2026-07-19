@@ -55,6 +55,33 @@ def test_download_parser_accepts_auth_file(tmp_path: Path):
     assert args.auth_file == auth_file
 
 
+def test_download_parser_accepts_ffmpeg_path():
+    parser = make_download_parser()
+    # 默认从 PATH 解析（与上游一致）；显式指定则透传具体路径
+    assert parser.parse_args(["https://example.com"]).ffmpeg_path == "ffmpeg"
+    assert (
+        parser.parse_args(["https://example.com", "--ffmpeg-path", "/opt/ffmpeg/ffmpeg"]).ffmpeg_path
+        == "/opt/ffmpeg/ffmpeg"
+    )
+
+
+def test_download_passes_ffmpeg_path_to_ffmpeg(monkeypatch: pytest.MonkeyPatch):
+    import yutto.validator as validator_module
+
+    recorded: dict[str, str] = {}
+
+    class RecordingFFmpeg:
+        def __init__(self, ffmpeg_path: str = "ffmpeg") -> None:
+            recorded["path"] = ffmpeg_path
+            raise RuntimeError("stop after recording")
+
+    monkeypatch.setattr(validator_module, "FFmpeg", RecordingFFmpeg)
+    args = argparse.Namespace(ffmpeg_path="/opt/ffmpeg/ffmpeg", fetch_workers=1)
+    with pytest.raises(RuntimeError, match="stop after recording"):
+        validator_module.validate_basic_arguments(args)
+    assert recorded["path"] == "/opt/ffmpeg/ffmpeg"
+
+
 def test_download_parser_rejects_auth_config(tmp_path: Path):
     auth_file = tmp_path / "auth.toml"
 

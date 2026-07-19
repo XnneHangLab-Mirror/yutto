@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 from types import SimpleNamespace
 
@@ -20,6 +21,28 @@ def test_serve_is_an_explicit_subcommand():
     assert args.command == "serve"
     assert args.port == 12345
     assert args.allow_origin == ["https://ui.example"]
+
+
+def test_serve_accepts_ffmpeg_path():
+    # 默认从 PATH 解析（与上游一致）；显式指定则透传具体路径
+    assert cli().parse_args(["serve"]).ffmpeg_path == "ffmpeg"
+    assert cli().parse_args(["serve", "--ffmpeg-path", "/opt/ffmpeg/ffmpeg"]).ffmpeg_path == "/opt/ffmpeg/ffmpeg"
+
+
+def test_serve_passes_ffmpeg_path_to_ffmpeg(monkeypatch: pytest.MonkeyPatch):
+    recorded: dict[str, str] = {}
+
+    class RecordingFFmpeg:
+        def __init__(self, ffmpeg_path: str = "ffmpeg") -> None:
+            recorded["path"] = ffmpeg_path
+            # 记录后立即短路：本测试只验证路径透传，无需真的启动 server
+            raise RuntimeError("stop after recording")
+
+    monkeypatch.setattr(server_command_module, "FFmpeg", RecordingFFmpeg)
+    args = argparse.Namespace(ffmpeg_path="/opt/ffmpeg/ffmpeg")
+    with pytest.raises(RuntimeError, match="stop after recording"):
+        server_command_module.run_server_command(args)
+    assert recorded["path"] == "/opt/ffmpeg/ffmpeg"
 
 
 def test_serve_io_error_is_rendered_without_traceback(monkeypatch: pytest.MonkeyPatch):
