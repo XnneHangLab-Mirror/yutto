@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import subprocess
 import sys
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -13,7 +14,7 @@ import yutto.utils.ffmpeg as ffmpeg_module
 from yutto.downloader.downloader import merge_video_and_audio, should_attach_hvc1_tag
 from yutto.exceptions import PostprocessingError
 from yutto.utils.ffmpeg import FFmpeg, FFmpegCommandBuilder
-from yutto.utils.functional import as_sync
+from yutto.utils.functional import Singleton, as_sync
 
 if TYPE_CHECKING:
     from yutto.media.codec import VideoCodec
@@ -455,3 +456,42 @@ async def test_merge_cancellation_removes_partial_output(monkeypatch: pytest.Mon
 
     assert output_path.exists() is False
     assert infos == ["开始合并……"]
+
+
+def test_singleton_warns_on_different_args():
+    class _TestSingleton(metaclass=Singleton):
+        def __init__(self, value: str = "default") -> None:
+            self.value = value
+
+    try:
+        first = _TestSingleton("alpha")
+        assert first.value == "alpha"
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            second = _TestSingleton("beta")
+
+        assert second is first
+        assert second.value == "alpha"
+        assert len(w) == 1
+        assert "already initialised" in str(w[0].message)
+        assert "beta" in str(w[0].message)
+
+        # Same args → no warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            third = _TestSingleton("alpha")
+
+        assert third is first
+        assert len(w) == 0
+
+        # No args → no warning (common pattern: FFmpeg() reuse)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            fourth = _TestSingleton()
+
+        assert fourth is first
+        assert len(w) == 0
+    finally:
+        Singleton._instances.pop(_TestSingleton, None)
+        Singleton._init_args.pop(_TestSingleton, None)

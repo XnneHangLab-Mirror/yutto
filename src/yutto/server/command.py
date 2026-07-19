@@ -147,9 +147,7 @@ def _build_download_application(ctx: FetcherContext, event_sink: DownloadEventSi
 
 @as_sync
 async def run_server_command(args: argparse.Namespace) -> None:
-    # 与 download 子命令一样，在真正接收任务前确认 FFmpeg 可用。
-    # FFmpeg 是单例，这里是进程内第一次实例化，因此 --ffmpeg-path 会被下载器后续
-    # 无参的 FFmpeg() 调用复用（yutto 上游没有 --ffmpeg-path，仅按名走 PATH 解析）。
+    # 必须是进程内第一次 FFmpeg 实例化（单例会将此路径锁定给后续无参调用）。
     ffmpeg = FFmpeg(args.ffmpeg_path)
     token = resolve_server_token(args.token_file)
     server = build_server(args, token.value, ffmpeg=ffmpeg)
