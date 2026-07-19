@@ -1,7 +1,7 @@
 [project]
-name = "yutto"
-version = "2.2.0"
-description = "🧊 一个可爱且任性的 B 站视频下载器"
+name = "uiya-yutto"
+version = "0.2.3"
+description = "为 yutto-uiya 桌面应用重新打包的 yutto 发行版（非官方；上游 https://github.com/yutto-dev/yutto）"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
@@ -58,6 +58,9 @@ biliass = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]
+
+[tool.uv.build-backend]
+module-name = "yutto"
 
 [tool.pytest]
 markers = ["api", "e2e", "processor", "biliass", "ignore", "ci_skip", "ci_only"]
