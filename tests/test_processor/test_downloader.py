@@ -6,7 +6,6 @@ import httpx
 import pytest
 
 from yutto.downloader.downloader import slice_blocks
-from yutto.utils.asynclib import CoroutineWrapper
 from yutto.utils.fetcher import Fetcher, FetcherContext, create_client, unwrap_fetch_result
 from yutto.utils.file_buffer import AsyncFileBuffer
 from yutto.utils.functional import as_sync
@@ -23,21 +22,21 @@ async def test_150_kB_downloader():
     url = "https://github.com/nhegde610/samples-files/raw/main/file_example_MP4_480_1_5MG.mp4"
     file_path = TEST_DIR / "test_150_kB.pdf"
     ctx = FetcherContext()
-    async with await AsyncFileBuffer(file_path, overwrite=False) as buffer:
+    async with await AsyncFileBuffer.open(file_path, overwrite=False) as buffer:
         async with create_client(
             timeout=httpx.Timeout(7, connect=3),
         ) as client:
             ctx.set_download_semaphore(4)
             size = unwrap_fetch_result(await Fetcher.get_size(ctx, client, url))
             coroutines = [
-                CoroutineWrapper(Fetcher.download_file_with_offset(ctx, client, url, [], buffer, offset, block_size))
+                Fetcher.download_file_with_offset(ctx, client, url, [], buffer, offset, block_size)
                 for offset, block_size in slice_blocks(buffer.written_size, size, 1 * 1024 * 1024)
             ]
 
             print("开始下载……")
             await asyncio.gather(*coroutines)
             print("下载完成！")
-            assert size == file_path.stat().st_size, "文件大小与实际大小不符"
+    assert size == file_path.stat().st_size, "文件大小与实际大小不符"
 
 
 @pytest.mark.processor
@@ -48,15 +47,15 @@ async def test_150_kB_no_slice_downloader():
     url = "https://github.com/nhegde610/samples-files/raw/main/file_example_MP4_480_1_5MG.mp4"
     file_path = TEST_DIR / "test_150_kB_no_slice.pdf"
     ctx = FetcherContext()
-    async with await AsyncFileBuffer(file_path, overwrite=False) as buffer:
+    async with await AsyncFileBuffer.open(file_path, overwrite=False) as buffer:
         async with create_client(
             timeout=httpx.Timeout(7, connect=3),
         ) as client:
             ctx.set_download_semaphore(4)
             size = unwrap_fetch_result(await Fetcher.get_size(ctx, client, url))
-            coroutines = [CoroutineWrapper(Fetcher.download_file_with_offset(ctx, client, url, [], buffer, 0, size))]
+            coroutines = [Fetcher.download_file_with_offset(ctx, client, url, [], buffer, 0, size)]
 
             print("开始下载……")
             await asyncio.gather(*coroutines)
             print("下载完成！")
-            assert size == file_path.stat().st_size, "文件大小与实际大小不符"
+    assert size == file_path.stat().st_size, "文件大小与实际大小不符"
