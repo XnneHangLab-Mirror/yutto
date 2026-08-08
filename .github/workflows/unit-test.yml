@@ -2,7 +2,7 @@ name: Unit Test
 
 on:
   push:
-    branches: [main]
+    branches: [dev, main]
   pull_request:
   merge_group:
   workflow_dispatch:
@@ -22,21 +22,27 @@ jobs:
           submodules: recursive
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
       - name: Install python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.architecture }}
           allow-prereleases: true
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install just
         uses: extractions/setup-just@v4
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check lockfile
+        run: uv lock --check
 
       - name: Install dependencies
         run: |
@@ -47,8 +53,45 @@ jobs:
           just ci-test ${{ matrix.python-version }}
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         if: ${{ matrix.python-version == '3.14' && github.event_name != 'merge_group' && !github.event.repository.fork }}
         with:
           mode: simulation
           run: uv run -p ${{ matrix.python-version }} pytest --codspeed
+
+  unit-test-rust:
+    name: yutto Rust unit test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run unit tests
+        working-directory: rust
+        run: cargo test --all-targets --all-features
+
+  unit-test-rust-msrv:
+    name: yutto Rust 1.85 compatibility
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust 1.85 toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: clippy
+
+      - name: Check MSRV compatibility
+        working-directory: rust
+        run: |
+          cargo check --locked --all-targets --all-features
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo test --locked --all-targets --all-features

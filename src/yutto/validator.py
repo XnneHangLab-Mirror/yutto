@@ -1,19 +1,18 @@
 from __future__ import annotations
 
-import asyncio
 import os
 import sys
 from typing import TYPE_CHECKING
 
 import biliass
 
-from yutto.api.user_info import validate_user_info
 from yutto.auth import format_auth_inline, resolve_auth
-from yutto.exceptions import ErrorCode, WrongArgumentError
-from yutto.input_parser import validate_episodes_selection
+from yutto.exceptions import ErrorCode
+from yutto.input_parser import validate_batch_selection
 from yutto.media.codec import audio_codec_priority_default, video_codec_priority_default
 from yutto.utils.console.colorful import set_no_color
-from yutto.utils.console.logger import Badge, Logger, set_logger_debug
+from yutto.utils.console.logger import Logger, set_logger_debug
+from yutto.utils.fetcher import resolve_proxy
 from yutto.utils.ffmpeg import FFmpeg
 
 if TYPE_CHECKING:
@@ -21,7 +20,6 @@ if TYPE_CHECKING:
 
     from yutto.auth import AuthInfo
     from yutto.media.codec import VideoCodec
-    from yutto.utils.fetcher import FetcherContext
 
 
 def hydrate_auth(args: argparse.Namespace) -> AuthInfo | None:
@@ -36,10 +34,10 @@ def hydrate_auth(args: argparse.Namespace) -> AuthInfo | None:
         sys.exit(ErrorCode.WRONG_ARGUMENT_ERROR.value)
 
 
-def initial_validation(ctx: FetcherContext, args: argparse.Namespace):
+def initial_validation(args: argparse.Namespace):
     """初始化检查，仅执行一次"""
 
-    if not args.no_progress:
+    if not args.no_progress and sys.stdout.isatty():
         Logger.enable_statusbar()
 
     # 在使用 --no-color 或者环境变量 NO_COLOR 非空时都应该不显示颜色
@@ -52,41 +50,6 @@ def initial_validation(ctx: FetcherContext, args: argparse.Namespace):
         set_logger_debug()
         biliass.enable_tracing()
 
-    # proxy 校验
-    try:
-        ctx.set_proxy(args.proxy)
-    except ValueError as e:
-        Logger.error(str(e))
-        sys.exit(ErrorCode.WRONG_ARGUMENT_ERROR.value)
-
-    # 批量解析并发数设置
-    ctx.set_fetch_workers(args.fetch_workers)
-
-    # 大会员身份校验
-    auth = hydrate_auth(args)
-    if not auth:
-        Logger.info(
-            "未提供登录认证信息，无法下载高清视频、字幕等资源哦～请通过 `--auth` 参数提供认证信息，或者先使用 `yutto auth login` 登录存储认证信息后再下载～"
-        )
-    else:
-        ctx.set_auth_info(auth)
-        if asyncio.run(validate_user_info(ctx, {"vip_status": True, "is_login": True})):
-            Logger.custom("成功以大会员身份登录～", badge=Badge("大会员", fore="white", back="magenta", style=["bold"]))
-        else:
-            Logger.warning("以非大会员身份登录，注意无法下载会员专享剧集喔～")
-
-    # cover_only 时自动设置 save_cover
-    if (
-        args.require_cover
-        and not args.require_video
-        and not args.require_audio
-        and not args.require_danmaku
-        and not args.require_subtitle
-        and not args.require_metadata
-        and not args.require_chapter_info
-    ):
-        args.save_cover = True
-
 
 def validate_basic_arguments(args: argparse.Namespace):
     """检查 argparse 无法检查的选项，并设置某些全局的状态"""
@@ -97,6 +60,17 @@ def validate_basic_arguments(args: argparse.Namespace):
     # fetch_workers 检查
     if args.fetch_workers < 1:
         Logger.error(f"fetch_workers 参数值（{args.fetch_workers}）不满足要求哦（应为不小于 1 的整数）")
+        sys.exit(ErrorCode.WRONG_ARGUMENT_ERROR.value)
+
+    # num_workers 检查
+    if args.num_workers < 1:
+        Logger.error(f"num_workers 参数值（{args.num_workers}）不满足要求哦（应为不小于 1 的整数）")
+        sys.exit(ErrorCode.WRONG_ARGUMENT_ERROR.value)
+
+    try:
+        resolve_proxy(args.proxy)
+    except ValueError as e:
+        Logger.error(str(e))
         sys.exit(ErrorCode.WRONG_ARGUMENT_ERROR.value)
 
     download_vcodec_priority: list[VideoCodec] = video_codec_priority_default
@@ -176,11 +150,3 @@ def validate_basic_arguments(args: argparse.Namespace):
 def validate_batch_arguments(args: argparse.Namespace):
     """检查批量下载相关选项"""
     validate_batch_selection(args.episodes)
-
-
-def validate_batch_selection(episodes: str):
-    """检查 Core 请求中的批量选集格式。"""
-    # 检查 episodes 格式（简单的正则检查，后续过滤剧集时还有完整检查）
-    if not validate_episodes_selection(episodes):
-        # TODO: 错误信息链接到相应文档，当然需要先写文档……
-        raise WrongArgumentError(f"选集参数（{episodes}）格式不正确呀～重新检查一下下～")

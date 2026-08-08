@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
@@ -8,8 +9,21 @@ from typing import cast
 import pytest
 from pydantic import BaseModel
 
+import yutto.core.execution as execution_module
+from yutto.auth import load_auth
+from yutto.core.events import DownloadItemListed
+from yutto.core.execution import RequestExecutionScopeFactory
 from yutto.core.request import DownloadRequest
-from yutto.core.result import Artifact, ArtifactKind, DownloadResult, ItemResult, ItemState
+from yutto.core.result import (
+    Artifact,
+    ArtifactKind,
+    DownloadResult,
+    ItemResult,
+    ItemState,
+    ResolvedItem,
+    ResolveResult,
+)
+from yutto.core.task_service import _encode_runtime_event
 from yutto.runtime import EventReplay, TaskError, TaskEvent, TaskSnapshot, TaskState
 from yutto.server.service import (
     ServerPolicy,
@@ -20,6 +34,8 @@ from yutto.server.service import (
     snapshot_summary_to_json,
     snapshot_to_json,
 )
+from yutto.types import AId, CId
+from yutto.utils.functional import as_sync
 
 pytestmark = pytest.mark.processor
 
@@ -143,6 +159,13 @@ def test_policy_rejects_worker_counts_outside_configured_limits(tmp_path: Path, 
         policy.prepare_request(make_request(network=network))
 
 
+def test_prepare_request_rejects_invalid_auth_profile(tmp_path: Path):
+    policy = make_policy(tmp_path)
+
+    with pytest.raises(ServerPolicyError, match="auth profile 名称不合法"):
+        policy.prepare_request(make_request(access={"auth_profile": "bad profile"}))
+
+
 @pytest.mark.parametrize("block_size", [0, -1, 64 * 1024 - 1, 64 * 1024 * 1024 + 1])
 def test_policy_rejects_unsafe_block_sizes(tmp_path: Path, block_size: int):
     policy = make_policy(tmp_path)
@@ -181,7 +204,11 @@ def test_options_reject_non_positive_worker_limits(tmp_path: Path, field: str):
         ServerPolicyOptions(**options)  # ty: ignore[invalid-argument-type]
 
 
-def test_build_context_applies_proxy_fetch_limit_and_selected_auth_profile(tmp_path: Path):
+@as_sync
+async def test_scope_factory_applies_request_network_and_selected_auth_profile(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+):
     policy = make_policy(tmp_path, max_fetch_workers=4)
     policy.options.auth_file.write_text(
         """
@@ -198,21 +225,72 @@ bili_jct = "csrf-value"
         access={"auth_profile": "work"},
         network={"proxy": "no", "fetch_workers": 3},
     )
+    captured: dict[str, object] = {}
+    create_client = execution_module.create_client
 
-    context = policy.build_context(request)
+    @asynccontextmanager
+    async def capture_client(**kwargs):
+        captured.update(kwargs)
+        async with create_client(**kwargs) as session:
+            yield session
 
-    assert context.proxy is None
-    assert context.trust_env is False
-    assert context.fetch_workers == 3
-    assert context.cookies.get("SESSDATA") == "session%2Cvalue"
-    assert context.cookies.get("bili_jct") == "csrf-value"
+    monkeypatch.setattr(execution_module, "create_client", capture_client)
+
+    async with policy.build_scope_factory().open(request) as scope:
+        assert captured["trust_env"] is False
+        assert scope.fetch_limiter._value == 3
+        assert scope.session.cookie("SESSDATA") == "session%2Cvalue"
+        assert scope.session.cookie("bili_jct") == "csrf-value"
 
 
-def test_build_context_rejects_invalid_auth_profile_without_exposing_auth_file(tmp_path: Path):
+@as_sync
+async def test_cli_and_server_scope_factories_interpret_same_request_equivalently(tmp_path: Path):
+    policy = make_policy(tmp_path)
+    policy.options.auth_file.write_text(
+        """
+[profiles.work]
+sessdata = "session,value"
+bili_jct = "csrf-value"
+""".strip(),
+        encoding="utf-8",
+    )
+    request = make_request(
+        access={"auth_profile": "work"},
+        network={
+            "proxy": "no",
+            "fetch_workers": 3,
+            "download_workers": 4,
+        },
+    )
+    cli_factory = RequestExecutionScopeFactory(
+        lambda active_request: load_auth(
+            policy.options.auth_file,
+            active_request.access.auth_profile,
+        )
+    )
+
+    async with (
+        cli_factory.open(request) as cli_scope,
+        policy.build_scope_factory().open(request) as server_scope,
+    ):
+        assert (
+            cli_scope.fetch_limiter._value,
+            cli_scope.download_workers,
+            cli_scope.session.cookie("SESSDATA"),
+            cli_scope.session.cookie("bili_jct"),
+        ) == (
+            server_scope.fetch_limiter._value,
+            server_scope.download_workers,
+            server_scope.session.cookie("SESSDATA"),
+            server_scope.session.cookie("bili_jct"),
+        )
+
+
+def test_scope_factory_rejects_invalid_auth_profile_without_exposing_auth_file(tmp_path: Path):
     policy = make_policy(tmp_path)
 
     with pytest.raises(ServerPolicyError, match="auth profile"):
-        policy.build_context(make_request(access={"auth_profile": "bad profile"}))
+        policy.resolve_credentials(make_request(access={"auth_profile": "bad profile"}))
 
 
 class CredentialPayload(BaseModel):
@@ -322,6 +400,94 @@ def test_download_result_serializes_paths_enums_and_tuples():
             }
         ]
     }
+
+
+def test_listing_event_and_result_share_jsonrpc_wire_shape():
+    created_at = datetime(2026, 7, 12, 11, 12, 13, tzinfo=UTC)
+
+    def serialize_both(item: ResolvedItem) -> tuple[dict[str, object], dict[str, object]]:
+        kind, data = _encode_runtime_event(DownloadItemListed(item=item))
+        event = TaskEvent(
+            task_id="task-listing",
+            seq=1,
+            kind=kind,
+            state=TaskState.RUNNING,
+            created_at=created_at,
+            data=data,
+        )
+        snapshot = TaskSnapshot[DownloadRequest, ResolveResult](
+            task_id="task-listing",
+            state=TaskState.COMPLETED,
+            payload=make_request(),
+            result=ResolveResult(items=(item,)),
+            error=None,
+            created_at=created_at,
+            started_at=created_at,
+            finished_at=created_at,
+            last_event_seq=1,
+        )
+        event_wire = cast("dict[str, object]", event_to_json(event)["data"])
+        result = cast("dict[str, object]", snapshot_to_json(snapshot)["result"])
+        result_wire = cast("list[dict[str, object]]", result["items"])[0]
+        return event_wire, result_wire
+
+    item = ResolvedItem(
+        avid=AId("1"),
+        cid=CId("10"),
+        url="https://www.bilibili.com/video/av1?p=1",
+        name="P1",
+        title="标题",
+        cover_url="https://example.com/cover.jpg",
+        planned_path=Path("标题/P1"),
+        display_group="标题",
+        uploader="某UP主",
+        description="视频简介",
+        tags=("标签A", "标签B"),
+    )
+    expected = {
+        "avid": "1",
+        "cid": "10",
+        "url": "https://www.bilibili.com/video/av1?p=1",
+        "name": "P1",
+        "title": "标题",
+        "cover_url": "https://example.com/cover.jpg",
+        "planned_path": "标题/P1",
+        "display_group": "标题",
+        "uploader": "某UP主",
+        "description": "视频简介",
+        "tags": ["标签A", "标签B"],
+    }
+    event_wire, result_wire = serialize_both(item)
+
+    assert event_wire == result_wire == expected
+    assert type(event_wire["avid"]) is str
+    assert type(event_wire["planned_path"]) is str
+    assert type(event_wire["tags"]) is list
+
+    default_item = ResolvedItem(
+        avid=AId("2"),
+        cid=CId("20"),
+        url="https://www.bilibili.com/video/av2?p=1",
+        name="单集",
+        title="单集",
+        cover_url="",
+        planned_path=Path("单集"),
+    )
+    default_expected = {
+        "avid": "2",
+        "cid": "20",
+        "url": "https://www.bilibili.com/video/av2?p=1",
+        "name": "单集",
+        "title": "单集",
+        "cover_url": "",
+        "planned_path": "单集",
+        "display_group": None,
+        "uploader": "",
+        "description": "",
+        "tags": [],
+    }
+
+    assert serialize_both(default_item) == (default_expected, default_expected)
 
 
 def test_event_and_replay_serialization_use_enum_values_iso_dates_and_redaction():

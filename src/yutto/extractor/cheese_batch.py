@@ -4,19 +4,17 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from yutto.api.cheese import get_cheese_list, get_season_id_by_episode_id
+from yutto.core.operation import emit_download_report
 from yutto.extractor._abc import BatchExtractor
 from yutto.extractor.common import make_cheese_episode
 from yutto.extractor.outcome import ResolveOutcome
 from yutto.input_parser import parse_episodes_selection
 from yutto.types import EpisodeId, SeasonId
-from yutto.utils.console.logger import Badge, Logger
 
 if TYPE_CHECKING:
-    import httpx
-
+    from yutto.core.execution import ExecutionScope
     from yutto.extractor._abc import EpisodeListedCallback, ExtractorResolveOutcome
     from yutto.types import ExtractorOptions
-    from yutto.utils.fetcher import FetcherContext
 
 
 class CheeseBatchExtractor(BatchExtractor):
@@ -50,33 +48,31 @@ class CheeseBatchExtractor(BatchExtractor):
         else:
             return False
 
-    async def _parse_ids(self, ctx: FetcherContext, client: httpx.AsyncClient):
+    async def _parse_ids(self, scope: ExecutionScope):
         if "episode_id" in self._match_result.groupdict().keys():
             episode_id = EpisodeId(self._match_result.group("episode_id"))
-            self.season_id = await get_season_id_by_episode_id(ctx, client, episode_id)
+            self.season_id = await get_season_id_by_episode_id(scope, episode_id)
         else:
             self.season_id = SeasonId(self._match_result.group("season_id"))
 
     async def extract(
         self,
-        ctx: FetcherContext,
-        client: httpx.AsyncClient,
+        scope: ExecutionScope,
         options: ExtractorOptions,
         *,
         on_item: EpisodeListedCallback | None = None,
     ) -> ExtractorResolveOutcome:
-        await self._parse_ids(ctx, client)
+        await self._parse_ids(scope)
 
-        cheese_list = await get_cheese_list(ctx, client, self.season_id)
-        Logger.custom(cheese_list["title"], Badge("课程", fore="black", back="cyan"))
+        cheese_list = await get_cheese_list(scope, self.season_id)
+        emit_download_report(cheese_list["title"], badge="课程")
         # 选集过滤
         episodes = parse_episodes_selection(options["episodes"], len(cheese_list["pages"]))
         cheese_list["pages"] = list(filter(lambda item: item["id"] in episodes, cheese_list["pages"]))
         return ResolveOutcome(
             items=tuple(
                 make_cheese_episode(
-                    ctx,
-                    client,
+                    scope,
                     cheese_item["episode_id"],
                     cheese_item,
                     options,

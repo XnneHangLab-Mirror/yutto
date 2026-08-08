@@ -24,21 +24,21 @@
 
 当然，如果你有更熟悉的编辑器或 IDE 的话，也是完全可以的。
 
-### Rust 开发工具链（可选）
+### Rust 开发工具链
 
-本 repo 是一个 monorepo，同时包含 yutto 和 biliass 两个包，其中 biliass 采用 Rust 编写，如果你有 biliass 联调的需求，则需要安装 Rust 工具链，安装方法请参考 [Rust 官方文档](https://www.rust-lang.org/tools/install)
+本 repo 是一个 monorepo：根 `rust/` 提供 yutto 的 Haya 下载器、原生 HTTP session 和 `yutto._core` 扩展，`packages/biliass/` 则是独立发布的 Rust 包。源代码开发与测试都需要 Rust 工具链；请安装 [Rust 官方工具链](https://www.rust-lang.org/tools/install)，并保证根 workspace 与 Rust 1.85 兼容。
 
-如果你不需要联调 biliass，那么可以通过注释掉 [pyproject.toml](./pyproject.toml) 中的 `tool.uv.sources` 和 `tool.uv.workspace`，避免 uv 将其当作一个子项目来处理。此时 uv 会安装 pypi 上预编译的 biliass wheel 包，而不会编译源码。这在大多数情况下是没有问题的，除非 yutto 使用了 biliass 的最新特性。
+执行 `uv sync` 会通过 maturin 构建根原生扩展。需要检查 Rust 代码时，在根 `rust/` 运行 `cargo fmt --all -- --check`、`cargo clippy --locked --all-targets --all-features -- -D warnings` 和 `cargo test --locked --all-targets --all-features`；biliass 的对应命令在 `packages/biliass/rust/` 运行。
 
 ## 本地调试
 
 如果你想要本地调试，最佳实践是从 GitHub 上下载最新的源码来运行
 
 ```bash
-git clone git@github.com:yutto-dev/yutto.git
+git clone git@github.com:XnneHangLab-Mirror/yutto.git
 cd yutto/
 uv sync
-uv run yutto -v
+uv run python -m yutto -v
 ```
 
 注意本地调试请不要直接使用 `yutto` 命令，那只会运行从 pip 安装的 yutto，而不是本地调试的 yutto。

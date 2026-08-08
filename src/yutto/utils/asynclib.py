@@ -1,21 +1,24 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
-import time
-import types
-from functools import partial, wraps
+from functools import partial
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from typing_extensions import ParamSpec
 
-from yutto.utils.console.logger import Logger
-
 if TYPE_CHECKING:
-    from collections.abc import Callable, Coroutine, Iterable
+    from collections.abc import Awaitable, Callable, Coroutine, Iterable
 
 RetT = TypeVar("RetT")
 P = ParamSpec("P")
+
+
+class NoSuccessfulResultError(Exception):
+    """No raced operation completed successfully."""
+
+    def __init__(self, exceptions: Iterable[Exception]):
+        self.exceptions = tuple(exceptions)
+        super().__init__("no raced operation completed successfully")
 
 
 def make_coroutine_factory(
@@ -29,62 +32,38 @@ def make_coroutine_factory(
     return bind
 
 
-async def sleep_with_status_bar_refresh(seconds: float):
-    current_time = start_time = time.time()
-    while current_time - start_time < seconds:
-        Logger.status.next_tick()
-        await asyncio.sleep(min(1, seconds - (current_time - start_time)))
-        current_time = time.time()
+async def race_for_first_success(factories: Iterable[Callable[[], Awaitable[RetT]]]) -> RetT:
+    """Return the first successful value after reaping every started operation."""
 
+    factory_list = tuple(factories)
+    winner: list[RetT] = []
+    failures: list[Exception] = []
+    remaining = len(factory_list)
+    completed = asyncio.Event()
 
-def async_cache(
-    args_to_cache_key: Callable[[inspect.BoundArguments], str],
-) -> Callable[[Callable[P, Coroutine[Any, Any, RetT]]], Callable[P, Coroutine[Any, Any, RetT]]]:
-    def decorator(fn: Callable[P, Coroutine[Any, Any, RetT]]) -> Callable[P, Coroutine[Any, Any, RetT]]:
-        CACHE: dict[str, RetT] = {}
+    async def run(factory: Callable[[], Awaitable[RetT]]) -> None:
+        nonlocal remaining
+        try:
+            value = await factory()
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            failures.append(error)
+        else:
+            if not winner:
+                winner.append(value)
+        finally:
+            remaining -= 1
+            if winner or not remaining:
+                completed.set()
 
-        @wraps(fn)
-        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> RetT:
-            assert isinstance(fn, types.FunctionType)
-
-            sig = inspect.signature(fn)
-            bound_args = sig.bind(*args, **kwargs)
-            bound_args.apply_defaults()
-            cache_key = args_to_cache_key(bound_args)
-            if cache_key in CACHE:
-                Logger.debug(f"{fn.__name__} cache hit: {cache_key}")
-                return CACHE[cache_key]
-            Logger.debug(f"{fn.__name__} cache miss: {cache_key}, all cache keys: {list(CACHE.keys())}")
-            return CACHE.setdefault(cache_key, await fn(*args, **kwargs))
-
-        return wrapper
-
-    return decorator
-
-
-async def first_successful(coros: Iterable[Coroutine[Any, Any, RetT]]) -> list[RetT]:
-    tasks = [asyncio.create_task(coro) for coro in coros]
-
-    results: list[RetT] = []
-    try:
-        while not results:
-            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            results = [task.result() for task in done if task.exception() is None]
-    except asyncio.CancelledError:
+    async with asyncio.TaskGroup() as group:
+        tasks = [group.create_task(run(factory)) for factory in factory_list]
+        if tasks:
+            await completed.wait()
         for task in tasks:
             task.cancel()
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-        raise
-    for task in tasks:
-        task.cancel()
-    return results
 
-
-async def first_successful_with_check(coros: Iterable[Coroutine[Any, Any, RetT]]) -> RetT:
-    results = await first_successful(coros)
-    if not results:
-        raise Exception("All coroutines failed")
-    if len(set(results)) != 1:
-        raise Exception("Multiple coroutines returned different results")
-    return results[0]
+    if winner:
+        return winner[0]
+    raise NoSuccessfulResultError(failures)

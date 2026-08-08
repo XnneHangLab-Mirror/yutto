@@ -4,7 +4,6 @@ import asyncio
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 
-import httpx
 import pytest
 from returns.result import Success
 
@@ -12,6 +11,8 @@ import yutto.__main__ as main_module
 import yutto.download_manager as download_manager_module
 import yutto.extractor.bangumi as bangumi_module
 import yutto.extractor.cheese as cheese_module
+from yutto._native import InvalidUrlError
+from yutto.core.execution import ExecutionScope
 from yutto.core.request import DownloadRequest
 from yutto.download_manager import DownloadManager
 from yutto.exceptions import (
@@ -26,7 +27,7 @@ from yutto.extractor.bangumi import BangumiExtractor
 from yutto.extractor.cheese import CheeseExtractor
 from yutto.input_parser import parse_episodes_selection
 from yutto.types import SeasonId
-from yutto.utils.fetcher import Fetcher, FetcherContext
+from yutto.utils.fetcher import Fetcher
 from yutto.utils.filter import PublicationTimeFilter
 from yutto.utils.functional import as_sync
 from yutto.validator import validate_batch_selection
@@ -76,19 +77,14 @@ def test_selection_validation_raises_structured_argument_errors():
 
 @pytest.mark.processor
 @as_sync
-async def test_manager_raises_login_error_without_rendering(monkeypatch: pytest.MonkeyPatch):
-    rendered_errors: list[str] = []
-
-    async def reject_login(ctx: FetcherContext, requirements: dict[str, bool]) -> bool:
+async def test_manager_raises_login_error(monkeypatch: pytest.MonkeyPatch):
+    async def reject_login(scope: ExecutionScope, requirements: dict[str, bool]) -> bool:
         return False
 
     monkeypatch.setattr(download_manager_module, "validate_user_info", reject_login)
-    monkeypatch.setattr(download_manager_module.Logger, "error", lambda message: rendered_errors.append(str(message)))
-
     with pytest.raises(NotLoginError) as exc_info:
         await DownloadManager().process_request(
-            cast("httpx.AsyncClient", object()),
-            FetcherContext(),
+            ExecutionScope(cast("Any", object())),
             make_request(),
         )
 
@@ -97,28 +93,22 @@ async def test_manager_raises_login_error_without_rendering(monkeypatch: pytest.
         "启用了严格校验大会员或登录模式，请检查认证信息（--auth）或大会员状态！",
         ErrorCode.NOT_LOGIN_ERROR,
     )
-    assert rendered_errors == []
 
 
 @pytest.mark.processor
 @as_sync
-async def test_manager_raises_url_errors_without_rendering_or_network(monkeypatch: pytest.MonkeyPatch):
-    rendered_errors: list[str] = []
-
-    async def accept_login(ctx: FetcherContext, requirements: dict[str, bool]) -> bool:
+async def test_manager_raises_url_errors_without_network(monkeypatch: pytest.MonkeyPatch):
+    async def accept_login(scope: ExecutionScope, requirements: dict[str, bool]) -> bool:
         return True
 
-    async def reject_url(ctx: FetcherContext, client: httpx.AsyncClient, url: str):
-        raise httpx.InvalidURL("invalid")
+    async def reject_url(scope: ExecutionScope, url: str):
+        raise InvalidUrlError("invalid")
 
     monkeypatch.setattr(download_manager_module, "validate_user_info", accept_login)
     monkeypatch.setattr(Fetcher, "get_redirected_url", reject_url)
-    monkeypatch.setattr(download_manager_module.Logger, "error", lambda message: rendered_errors.append(str(message)))
-
     with pytest.raises(WrongUrlError) as exc_info:
         await DownloadManager().process_request(
-            cast("httpx.AsyncClient", object()),
-            FetcherContext(),
+            ExecutionScope(cast("Any", object())),
             make_request("not-a-url"),
         )
 
@@ -127,16 +117,15 @@ async def test_manager_raises_url_errors_without_rendering_or_network(monkeypatc
         "无效的 url(not-a-url)～请检查一下链接是否正确～",
         ErrorCode.WRONG_URL_ERROR,
     )
-    assert rendered_errors == []
 
 
 @pytest.mark.processor
 @as_sync
 async def test_manager_reports_unmatched_url_as_structured_error(monkeypatch: pytest.MonkeyPatch):
-    async def accept_login(ctx: FetcherContext, requirements: dict[str, bool]) -> bool:
+    async def accept_login(scope: ExecutionScope, requirements: dict[str, bool]) -> bool:
         return True
 
-    async def keep_url(ctx: FetcherContext, client: httpx.AsyncClient, url: str):
+    async def keep_url(scope: ExecutionScope, url: str):
         return Success(url)
 
     monkeypatch.setattr(download_manager_module, "validate_user_info", accept_login)
@@ -144,8 +133,7 @@ async def test_manager_reports_unmatched_url_as_structured_error(monkeypatch: py
 
     with pytest.raises(WrongUrlError) as exc_info:
         await DownloadManager().process_request(
-            cast("httpx.AsyncClient", object()),
-            FetcherContext(),
+            ExecutionScope(cast("Any", object())),
             make_request("https://example.com/unsupported"),
         )
 
@@ -189,22 +177,20 @@ async def test_single_extractors_raise_when_episode_is_missing(
     list_getter_name: str,
     url: str,
 ):
-    async def get_season(ctx: FetcherContext, client: httpx.AsyncClient, episode_id: Any) -> SeasonId:
+    async def get_season(scope: ExecutionScope, episode_id: Any) -> SeasonId:
         return SeasonId("1")
 
-    async def get_empty_list(ctx: FetcherContext, client: httpx.AsyncClient, season_id: SeasonId):
+    async def get_empty_list(scope: ExecutionScope, season_id: SeasonId):
         return {"title": "空列表", "pages": []}
 
     monkeypatch.setattr(module, "get_season_id_by_episode_id", get_season)
     monkeypatch.setattr(module, list_getter_name, get_empty_list)
-    monkeypatch.setattr(module.Logger, "custom", lambda *args, **kwargs: None)
     extractor = extractor_type()
     assert extractor.match(url)
 
     with pytest.raises(EpisodeNotFoundError) as exc_info:
         await extractor.extract(
-            FetcherContext(),
-            cast("httpx.AsyncClient", object()),
+            ExecutionScope(cast("Any", object())),
             EMPTY_EXTRACTOR_OPTIONS,
         )
 
@@ -217,17 +203,22 @@ def configure_download_cli(
     *,
     replace_logger: bool = True,
 ) -> tuple[list[str], list[str]]:
-    parser = SimpleNamespace(parse_args=lambda args: SimpleNamespace(command="download"))
+    parser = SimpleNamespace(parse_args=lambda args: SimpleNamespace(command="download", no_progress=True))
     rendered_errors: list[str] = []
     rendered_info: list[str] = []
 
-    def fail_download(ctx: FetcherContext, requests: list[DownloadRequest]):
+    def fail_download(
+        scope_factory: object,
+        requests: list[DownloadRequest],
+        renderer: object,
+    ):
         raise failure
 
     monkeypatch.setattr(main_module, "cli", lambda: parser)
     monkeypatch.setattr(main_module.sys, "argv", ["yutto", "BV1structured"])
-    monkeypatch.setattr(main_module, "initial_validation", lambda ctx, args: None)
+    monkeypatch.setattr(main_module, "initial_validation", lambda args: None)
     monkeypatch.setattr(main_module, "flatten_args", lambda args, parser: [args])
+    monkeypatch.setattr(main_module, "hydrate_auth", lambda args: None)
     monkeypatch.setattr(main_module, "download_request_from_namespace", lambda args: make_request())
     monkeypatch.setattr(main_module, "run_download", fail_download)
     if replace_logger:

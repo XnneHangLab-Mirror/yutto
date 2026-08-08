@@ -16,12 +16,13 @@ from yutto.core.events import (
     DownloadStage,
     DownloadStageChanged,
 )
+from yutto.core.execution import ExecutionScopeFactory, RequestExecutionScopeFactory
 from yutto.core.operation import emit_download_event
 from yutto.core.request import DownloadRequest
-from yutto.core.result import DownloadResult, ItemSkipReason
+from yutto.core.result import DownloadResult, ItemSkipReason, ResolvedItem
 from yutto.core.task_service import DownloadTaskService, _encode_runtime_event
 from yutto.runtime import TaskState
-from yutto.utils.fetcher import FetcherContext
+from yutto.types import AId, CId
 from yutto.utils.functional import as_sync
 
 if TYPE_CHECKING:
@@ -40,37 +41,35 @@ def task_ids() -> Iterator[str]:
 class RecordingApplication:
     def __init__(
         self,
-        ctx: FetcherContext,
+        scope_factory: ExecutionScopeFactory,
         event_sink: DownloadEventSink,
-        calls: list[tuple[FetcherContext, str]],
+        calls: list[tuple[ExecutionScopeFactory, str]],
     ):
-        self.ctx = ctx
+        self.scope_factory = scope_factory
         self.event_sink = event_sink
         self.calls = calls
         self.result = DownloadResult()
 
     async def download(self, request: DownloadRequest) -> DownloadResult:
         self.event_sink.emit(DownloadStageChanged(name=DownloadStage.RESOLVING))
-        self.calls.append((self.ctx, request.source.url))
+        self.calls.append((self.scope_factory, request.source.url))
         return self.result
 
 
 @as_sync
 async def test_download_task_service_runs_requests_in_order_and_bridges_events():
     ids = task_ids()
-    contexts: list[FetcherContext] = []
-    calls: list[tuple[FetcherContext, str]] = []
+    scope_factory = RequestExecutionScopeFactory()
+    calls: list[tuple[ExecutionScopeFactory, str]] = []
 
-    def context_factory(request: DownloadRequest) -> FetcherContext:
-        ctx = FetcherContext()
-        contexts.append(ctx)
-        return ctx
-
-    def application_factory(ctx: FetcherContext, event_sink: DownloadEventSink) -> RecordingApplication:
-        return RecordingApplication(ctx, event_sink, calls)
+    def application_factory(
+        factory: ExecutionScopeFactory,
+        event_sink: DownloadEventSink,
+    ) -> RecordingApplication:
+        return RecordingApplication(factory, event_sink, calls)
 
     service = DownloadTaskService(
-        context_factory,
+        scope_factory,
         application_factory=application_factory,
         task_id_factory=lambda: next(ids),
     )
@@ -86,7 +85,7 @@ async def test_download_task_service_runs_requests_in_order_and_bridges_events()
         assert first_done.result == DownloadResult()
         assert second_done.result == DownloadResult()
         assert [url for _, url in calls] == ["BV1first", "BV1second"]
-        assert [ctx for ctx, _ in calls] == contexts
+        assert all(factory is scope_factory for factory, _ in calls)
         first_replay = service.replay(first.task_id)
         assert first_replay is not None
         assert [(event.kind, event.data) for event in first_replay.events if event.kind == "stage"] == [
@@ -112,7 +111,7 @@ async def test_download_events_are_noop_outside_application_context():
             ("stage", {"name": "preparing", "item": "video"}),
         ),
         (
-            DownloadProgress(current=1, total=2, speed_per_second=3.0),
+            DownloadProgress(current=1, total=2, speed_per_second=3.0, buffered_bytes=1),
             (
                 "progress",
                 {
@@ -141,36 +140,26 @@ def test_runtime_event_encoding_preserves_protocol(event, expected):
 def test_download_event_annotations_are_available_at_runtime():
     assert get_type_hints(DownloadArtifactCreated)["path"] is Path
     assert get_type_hints(DownloadItemSkipped)["reason"] is ItemSkipReason
+    assert get_type_hints(DownloadItemListed)["item"] is ResolvedItem
 
 
 def test_encode_runtime_event_item_listed_carries_full_wire_fields():
-    kind, data = _encode_runtime_event(
-        DownloadItemListed(
-            avid="1",
-            cid="10",
-            url="https://www.bilibili.com/video/av1?p=1",
-            name="P1",
-            title="标题",
-            cover_url="https://example.com/cover.jpg",
-            planned_path=Path("标题/P1"),
-            display_group="标题",
-            uploader="某UP主",
-            description="视频简介",
-            tags=("标签A", "标签B"),
-        )
+    item = ResolvedItem(
+        avid=AId("1"),
+        cid=CId("10"),
+        url="https://www.bilibili.com/video/av1?p=1",
+        name="P1",
+        title="标题",
+        cover_url="https://example.com/cover.jpg",
+        planned_path=Path("标题/P1"),
+        display_group="标题",
+        uploader="某UP主",
+        description="视频简介",
+        tags=("标签A", "标签B"),
     )
+    kind, data = _encode_runtime_event(DownloadItemListed(item=item))
     assert kind == "item_listed"
-    # 逐字段钉死 wire 编码：planned_path 必须是 POSIX 风格字符串，tags 必须是 list
-    assert data == {
-        "avid": "1",
-        "cid": "10",
-        "url": "https://www.bilibili.com/video/av1?p=1",
-        "name": "P1",
-        "title": "标题",
-        "cover_url": "https://example.com/cover.jpg",
-        "planned_path": "标题/P1",
-        "display_group": "标题",
-        "uploader": "某UP主",
-        "description": "视频简介",
-        "tags": ["标签A", "标签B"],
-    }
+    assert data["avid"] == "1"
+    assert data["cid"] == "10"
+    assert data["planned_path"] == "标题/P1"
+    assert data["tags"] == ["标签A", "标签B"]

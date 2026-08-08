@@ -4,6 +4,7 @@ import re
 from typing import TYPE_CHECKING
 
 from yutto.api.bangumi import get_bangumi_list, get_season_id_by_episode_id
+from yutto.core.operation import ReportLevel, emit_download_report
 from yutto.exceptions import (
     EpisodeNotFoundError,
     HttpStatusError,
@@ -15,14 +16,11 @@ from yutto.extractor._abc import SingleExtractor
 from yutto.extractor.common import make_bangumi_episode
 from yutto.extractor.outcome import ResolveOutcome
 from yutto.types import EpisodeId
-from yutto.utils.console.logger import Badge, Logger
 
 if TYPE_CHECKING:
-    import httpx
-
+    from yutto.core.execution import ExecutionScope
     from yutto.extractor._abc import ExtractorResolveOutcome
     from yutto.types import ExtractorOptions
-    from yutto.utils.fetcher import FetcherContext
 
 
 class BangumiExtractor(SingleExtractor):
@@ -51,13 +49,12 @@ class BangumiExtractor(SingleExtractor):
 
     async def extract(
         self,
-        ctx: FetcherContext,
-        client: httpx.AsyncClient,
+        scope: ExecutionScope,
         options: ExtractorOptions,
     ) -> ExtractorResolveOutcome:
-        season_id = await get_season_id_by_episode_id(ctx, client, self.episode_id)
-        bangumi_list = await get_bangumi_list(ctx, client, season_id)
-        Logger.custom(bangumi_list["title"], Badge("番剧", fore="black", back="cyan"))
+        season_id = await get_season_id_by_episode_id(scope, self.episode_id)
+        bangumi_list = await get_bangumi_list(scope, season_id)
+        emit_download_report(bangumi_list["title"], badge="番剧")
         try:
             for bangumi_item in bangumi_list["pages"]:
                 if bangumi_item["episode_id"] == self.episode_id:
@@ -69,8 +66,7 @@ class BangumiExtractor(SingleExtractor):
             return ResolveOutcome(
                 items=(
                     make_bangumi_episode(
-                        ctx,
-                        client,
+                        scope,
                         bangumi_list_item,
                         options,
                         {
@@ -81,5 +77,5 @@ class BangumiExtractor(SingleExtractor):
                 )
             )
         except (NoAccessPermissionError, HttpStatusError, UnSupportedTypeError, NotFoundError) as e:
-            Logger.error(e.message)
+            emit_download_report(e.message, ReportLevel.ERROR)
             return ResolveOutcome(failures=(e,))

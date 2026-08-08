@@ -1,6 +1,6 @@
 [project]
 name = "uiya-yutto"
-version = "0.2.4"
+version = "0.3.0rc1"
 description = "为 yutto-uiya 桌面应用重新打包的 yutto 发行版（非官方；上游 https://github.com/yutto-dev/yutto）"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -21,32 +21,31 @@ classifiers = [
   "Programming Language :: Python :: Implementation :: CPython",
 ]
 dependencies = [
-  "aiofiles>=25.1.0",
-  "biliass==2.4.0",
+  "biliass==2.5.0",
   "colorama>=0.4.6; sys_platform == 'win32'",
   "typing-extensions>=4.15.0",
   "dict2xml>=1.7.8",
-  "httpx[http2,socks]>=0.28.1",
   "pydantic>=2.12.5",
   "returns>=0.26.0",
   "segno>=1.6.6",
-  "websockets>=16.0,<17",
+  "websockets>=17,<18",
 ]
 
 [project.urls]
-Homepage = "https://github.com/yutto-dev/yutto"
-Documentation = "https://github.com/yutto-dev/yutto"
-Repository = "https://github.com/yutto-dev/yutto"
-Issues = "https://github.com/yutto-dev/yutto/issues"
+Homepage = "https://github.com/XnneHangLab-Mirror/yutto"
+Documentation = "https://github.com/XnneHangLab-Mirror/yutto"
+Repository = "https://github.com/XnneHangLab-Mirror/yutto"
+Issues = "https://github.com/XnneHangLab/yutto-uiya/issues"
 
 [project.scripts]
 yutto = "yutto.__main__:main"
 
 [dependency-groups]
 dev = [
-  "ty>=0.0.61",
-  "ruff>=0.15.22",
-  "typos>=1.48.0",
+  "aiofiles>=25.1.0",
+  "ty>=0.0.69",
+  "ruff>=0.16.1",
+  "typos>=1.49.0",
   "pytest>=9.1.1",
   "pytest-rerunfailures>=16.4",
   "syrupy>=5.5.3",
@@ -58,9 +57,6 @@ biliass = { workspace = true }
 
 [tool.uv.workspace]
 members = ["packages/*"]
-
-[tool.uv.build-backend]
-module-name = "yutto"
 
 [tool.pytest]
 markers = ["api", "e2e", "processor", "biliass", "ignore", "ci_skip", "ci_only"]
@@ -123,6 +119,12 @@ runtime-evaluated-base-classes = ["pydantic.BaseModel"]
 [tool.ruff.lint.per-file-ignores]
 "setup.py" = ["I"]
 
+[tool.maturin]
+features = ["pyo3/extension-module"]
+manifest-path = "rust/crates/yutto/Cargo.toml"
+module-name = "yutto._core"
+python-source = "src"
+
 [build-system]
-requires = ["uv_build>=0.11.0,<0.12.0"]
-build-backend = "uv_build"
+requires = ["maturin>=1.14,<2.0"]
+build-backend = "maturin"

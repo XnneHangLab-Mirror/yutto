@@ -6,7 +6,10 @@
   "[python]": {
     "editor.defaultFormatter": "charliermarsh.ruff"
   },
-  "rust-analyzer.linkedProjects": ["${workspaceFolder}/packages/biliass/rust/Cargo.toml"],
+  "rust-analyzer.linkedProjects": [
+    "${workspaceFolder}/rust/Cargo.toml",
+    "${workspaceFolder}/packages/biliass/rust/Cargo.toml"
+  ],
   "search.exclude": {
     "**/*.ambr": true,
     "**/*.xml": true,

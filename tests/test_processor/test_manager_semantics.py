@@ -9,8 +9,10 @@ import pytest
 from returns.result import Success
 
 import yutto.download_manager as download_manager_module
+from yutto.core.execution import ExecutionScope, RequestExecutionScopeFactory
+from yutto.core.operation import ReportLevel, bind_download_report_sink
 from yutto.core.request import DownloadRequest
-from yutto.core.result import DownloadResult, ItemResult, ItemState
+from yutto.core.result import DownloadResult, ItemResult, ItemState, ResolvedItem
 from yutto.download_manager import (
     DownloadManager,
     ensure_output_path_is_scoped,
@@ -20,35 +22,33 @@ from yutto.download_manager import (
 from yutto.exceptions import NotLoginError, WrongArgumentError
 from yutto.extractor.outcome import ResolveOutcome
 from yutto.types import AId, CId, ResolvableEpisode
-from yutto.utils.console.logger import Badge, Logger
-from yutto.utils.fetcher import Fetcher, FetcherContext
+from yutto.utils.fetcher import Fetcher
 from yutto.utils.filter import PublicationTimeFilter
 from yutto.utils.functional import as_sync
-from yutto.utils.time import TIME_FULL_FMT
 
 if TYPE_CHECKING:
-    import httpx
-
+    from yutto.auth import AuthInfo
     from yutto.extractor._abc import ExtractorResolveOutcome
-    from yutto.types import DownloaderOptions, EpisodeData, ExtractorOptions
+    from yutto.types import EpisodeData, ExtractorOptions
 
 pytestmark = pytest.mark.processor
 
 
 def make_episode(path: str, display_group: str | None = None) -> EpisodeData:
+    planned_path = Path(path)
     return {
         "info": {
-            "avid": AId("1"),
-            "cid": CId("1"),
-            "url": "https://www.bilibili.com/video/av1?p=1",
-            "name": Path(path).name,
-            "title": Path(path).name,
-            "cover_url": "",
-            "uploader": "",
-            "description": "",
-            "tags": [],
-            "path": Path(path),
-            "display_group": display_group,
+            "listing": ResolvedItem(
+                avid=AId("1"),
+                cid=CId("1"),
+                url="https://www.bilibili.com/video/av1?p=1",
+                name=planned_path.name,
+                title=planned_path.name,
+                cover_url="",
+                planned_path=planned_path,
+                display_group=display_group,
+            ),
+            "path": planned_path,
         },
         "videos": [],
         "audios": [],
@@ -126,11 +126,11 @@ def make_request(tmp_dir: Path | None) -> DownloadRequest:
 @pytest.mark.processor
 @pytest.mark.parametrize("tmp_dir", [None, Path("temporary")])
 @as_sync
-async def test_process_request_preserves_extractor_and_downloader_option_mapping(
+async def test_process_request_preserves_extractor_mapping_and_passes_download_request_directly(
     monkeypatch: pytest.MonkeyPatch, tmp_dir: Path | None
 ):
     captured_extractor_options: dict[str, Any] = {}
-    captured_downloader_options: dict[str, Any] = {}
+    captured_download_request: DownloadRequest | None = None
     validation_requirements: list[dict[str, bool]] = []
     episode = make_episode("series/episode")
 
@@ -143,8 +143,7 @@ async def test_process_request_preserves_extractor_and_downloader_option_mapping
 
         async def __call__(
             self,
-            ctx: FetcherContext,
-            client: httpx.AsyncClient,
+            scope: ExecutionScope,
             options: ExtractorOptions,
         ) -> ExtractorResolveOutcome:
             captured_extractor_options.update(options)
@@ -154,36 +153,32 @@ async def test_process_request_preserves_extractor_and_downloader_option_mapping
 
             return ResolveOutcome(items=(ResolvableEpisode(info=episode["info"], resolve_data=resolve_episode),))
 
-    async def fake_validate_user_info(ctx: FetcherContext, requirements: dict[str, bool]) -> bool:
+    async def fake_validate_user_info(scope: ExecutionScope, requirements: dict[str, bool]) -> bool:
         validation_requirements.append(requirements)
         return True
 
-    async def fake_get_redirected_url(ctx: FetcherContext, client: httpx.AsyncClient, url: str):
+    async def fake_get_redirected_url(scope: ExecutionScope, url: str):
         return Success(url)
 
     async def fake_process_download(
-        ctx: FetcherContext,
-        client: httpx.AsyncClient,
+        scope: ExecutionScope,
         episode_data: EpisodeData,
-        options: DownloaderOptions,
+        request: DownloadRequest,
     ) -> ItemResult:
+        nonlocal captured_download_request
         assert episode_data is episode
-        captured_downloader_options.update(options)
+        captured_download_request = request
         return ItemResult(state=ItemState.DONE, output_path=Path("downloads/series/episode.mkv"))
-
-    def fake_block_options(**options: Any) -> dict[str, Any]:
-        return options
 
     monkeypatch.setattr(download_manager_module, "UgcVideoExtractor", FakeExtractor)
     monkeypatch.setattr(download_manager_module, "validate_user_info", fake_validate_user_info)
     monkeypatch.setattr(Fetcher, "get_redirected_url", fake_get_redirected_url)
     monkeypatch.setattr(download_manager_module, "process_download", fake_process_download)
-    monkeypatch.setattr(download_manager_module, "BlockOptions", fake_block_options)
-    monkeypatch.setattr(Logger, "new_line", lambda: None)
 
     manager = DownloadManager()
-    client = cast("httpx.AsyncClient", object())
-    result = await manager.process_request(client, FetcherContext(), make_request(tmp_dir))
+    session = cast("Any", object())
+    request = make_request(tmp_dir)
+    result = await manager.process_request(ExecutionScope(session), request)
 
     assert validation_requirements == [
         {"is_login": False, "vip_status": False},
@@ -207,44 +202,7 @@ async def test_process_request_preserves_extractor_and_downloader_option_mapping
             end_time=datetime(2025, 6, 7),
         ),
     }
-    assert captured_downloader_options == {
-        "output_dir": Path("downloads"),
-        "tmp_dir": tmp_dir or Path("downloads"),
-        "require_video": True,
-        "require_chapter_info": True,
-        "video_quality": 116,
-        "video_download_codec": "hevc",
-        "video_save_codec": "av1",
-        "video_download_codec_priority": ["av1", "hevc"],
-        "require_audio": False,
-        "audio_quality": 30280,
-        "audio_download_codec": "eac3",
-        "audio_save_codec": "flac",
-        "output_format": "mkv",
-        "output_format_audio_only": "flac",
-        "overwrite": True,
-        "block_size": 1_310_720,
-        "num_workers": 13,
-        "save_cover": True,
-        "metadata_format": {"premiered": "%Y", "dateadded": TIME_FULL_FMT},
-        "banned_mirrors_pattern": "example\\.com",
-        "danmaku_options": {
-            "font_size": 48,
-            "font": "Test Font",
-            "opacity": 0.6,
-            "display_region_ratio": 0.75,
-            "speed": 1.25,
-            "block_options": {
-                "block_top": True,
-                "block_bottom": True,
-                "block_scroll": True,
-                "block_reverse": True,
-                "block_special": True,
-                "block_colorful": True,
-                "block_keyword_patterns": ["spam", "eggs"],
-            },
-        },
-    }
+    assert captured_download_request is request
     assert result == (ItemResult(state=ItemState.DONE, output_path=Path("downloads/series/episode.mkv")),)
 
 
@@ -272,20 +230,18 @@ async def test_process_request_does_not_create_unreached_episode_coroutines(monk
     validation_results = iter([True, False])
 
     async def fake_resolve_request(
-        client: httpx.AsyncClient,
-        ctx: FetcherContext,
+        scope: ExecutionScope,
         request: DownloadRequest,
     ) -> ExtractorResolveOutcome:
         return ResolveOutcome(items=episodes)
 
-    async def fake_validate_user_info(ctx: FetcherContext, requirements: dict[str, bool]) -> bool:
+    async def fake_validate_user_info(scope: ExecutionScope, requirements: dict[str, bool]) -> bool:
         return next(validation_results)
 
     async def fake_process_download(
-        ctx: FetcherContext,
-        client: httpx.AsyncClient,
+        scope: ExecutionScope,
         episode_data: EpisodeData,
-        options: DownloaderOptions,
+        request: DownloadRequest,
     ) -> ItemResult:
         return ItemResult(state=ItemState.DONE, output_path=episode_data["info"]["path"])
 
@@ -293,12 +249,10 @@ async def test_process_request_does_not_create_unreached_episode_coroutines(monk
     monkeypatch.setattr(manager, "resolve_request", fake_resolve_request)
     monkeypatch.setattr(download_manager_module, "validate_user_info", fake_validate_user_info)
     monkeypatch.setattr(download_manager_module, "process_download", fake_process_download)
-    monkeypatch.setattr(Logger, "new_line", lambda: None)
 
     with pytest.raises(NotLoginError):
         await manager.process_request(
-            cast("httpx.AsyncClient", object()),
-            FetcherContext(),
+            ExecutionScope(cast("Any", object())),
             make_request(None),
         )
 
@@ -307,41 +261,75 @@ async def test_process_request_does_not_create_unreached_episode_coroutines(monk
 
 
 @as_sync
-async def test_execute_reuses_session_and_path_resolver_in_request_order():
-    ctx = FetcherContext()
+async def test_execute_uses_request_scopes_and_keeps_path_resolver_order():
     requests = [
-        DownloadRequest.model_validate({"source": {"url": "BV1first"}}),
-        DownloadRequest.model_validate({"source": {"url": "BV1second"}}),
+        DownloadRequest.model_validate(
+            {
+                "source": {"url": "BV1first"},
+                "access": {"auth_profile": "first"},
+                "network": {
+                    "proxy": "no",
+                    "fetch_workers": 2,
+                    "download_workers": 3,
+                },
+            }
+        ),
+        DownloadRequest.model_validate(
+            {
+                "source": {"url": "BV1second"},
+                "access": {"auth_profile": "second"},
+                "network": {
+                    "proxy": "auto",
+                    "fetch_workers": 5,
+                    "download_workers": 7,
+                },
+            }
+        ),
     ]
 
     class RecordingManager(DownloadManager):
         def __init__(self) -> None:
             super().__init__()
-            self.calls: list[tuple[httpx.AsyncClient, FetcherContext, str, str]] = []
+            self.calls: list[tuple[ExecutionScope, str, str]] = []
 
         async def process_request(
             self,
-            client: httpx.AsyncClient,
-            ctx: FetcherContext,
+            scope: ExecutionScope,
             request: DownloadRequest,
         ) -> tuple[ItemResult, ...]:
             path = self.unique_path("same/video.mp4")
-            self.calls.append((client, ctx, request.source.url, path))
+            self.calls.append((scope, request.source.url, path))
             return (ItemResult(state=ItemState.DONE, output_path=Path(path)),)
 
-    manager = RecordingManager()
-    result = await manager.execute(ctx, requests)
+    def resolve_credentials(request: DownloadRequest) -> AuthInfo:
+        return cast(
+            "AuthInfo",
+            {
+                "SESSDATA": f"{request.access.auth_profile},session",
+                "bili_jct": None,
+            },
+        )
 
-    assert [url for _, _, url, _ in manager.calls] == ["BV1first", "BV1second"]
+    manager = RecordingManager()
+    result = await manager.execute(RequestExecutionScopeFactory(resolve_credentials), requests)
+
+    assert [url for _, url, _ in manager.calls] == ["BV1first", "BV1second"]
     # unique_path 返回的字符串使用平台原生分隔符，按 Path 比较
-    assert [Path(path) for _, _, _, path in manager.calls] == [
+    assert [Path(path) for _, _, path in manager.calls] == [
         Path("same/video.mp4"),
         Path("same/video (1).mp4"),
     ]
-    assert manager.calls[0][0] is manager.calls[1][0]
-    assert manager.calls[0][1] is ctx and manager.calls[1][1] is ctx
-    assert manager.calls[0][0].is_closed
-    assert ctx.fetch_semaphore is not None
+    first_scope, second_scope = (scope for scope, _, _ in manager.calls)
+    assert first_scope is not second_scope
+    assert first_scope.session is not second_scope.session
+    assert first_scope.session.is_closed and second_scope.session.is_closed
+    assert first_scope.fetch_limiter._value == 2
+    assert first_scope.download_workers == 3
+    assert second_scope.fetch_limiter._value == 5
+    assert second_scope.download_workers == 7
+    assert first_scope.fetch_limiter is not second_scope.fetch_limiter
+    assert first_scope.session.cookie("SESSDATA") == "first%2Csession"
+    assert second_scope.session.cookie("SESSDATA") == "second%2Csession"
     assert result == DownloadResult(
         items=(
             ItemResult(state=ItemState.DONE, output_path=Path("same/video.mp4")),
@@ -351,7 +339,7 @@ async def test_execute_reuses_session_and_path_resolver_in_request_order():
 
 
 @as_sync
-async def test_execute_stops_on_failure_and_closes_client():
+async def test_execute_stops_on_failure_and_closes_session():
     requests = [
         DownloadRequest.model_validate({"source": {"url": "BV1first"}}),
         DownloadRequest.model_validate({"source": {"url": "BV1second"}}),
@@ -361,28 +349,27 @@ async def test_execute_stops_on_failure_and_closes_client():
         def __init__(self) -> None:
             super().__init__()
             self.calls: list[str] = []
-            self.client: httpx.AsyncClient | None = None
+            self.session: Any = None
 
         async def process_request(
             self,
-            client: httpx.AsyncClient,
-            ctx: FetcherContext,
+            scope: ExecutionScope,
             request: DownloadRequest,
         ) -> tuple[ItemResult, ...]:
-            self.client = client
+            self.session = scope.session
             self.calls.append(request.source.url)
             raise WrongArgumentError("request failed")
 
     manager = FailingManager()
     with pytest.raises(WrongArgumentError, match="request failed"):
-        await manager.execute(FetcherContext(), requests)
+        await manager.execute(RequestExecutionScopeFactory(), requests)
 
     assert manager.calls == ["BV1first"]
-    assert manager.client is not None and manager.client.is_closed
+    assert manager.session is not None and manager.session.is_closed
 
 
 @as_sync
-async def test_execute_cancellation_closes_client():
+async def test_execute_cancellation_closes_session():
     started = asyncio.Event()
     release = asyncio.Event()
     request = DownloadRequest.model_validate({"source": {"url": "BV1cancel"}})
@@ -390,62 +377,58 @@ async def test_execute_cancellation_closes_client():
     class BlockingManager(DownloadManager):
         def __init__(self) -> None:
             super().__init__()
-            self.client: httpx.AsyncClient | None = None
+            self.session: Any = None
 
         async def process_request(
             self,
-            client: httpx.AsyncClient,
-            ctx: FetcherContext,
+            scope: ExecutionScope,
             request: DownloadRequest,
         ) -> tuple[ItemResult, ...]:
-            self.client = client
+            self.session = scope.session
             started.set()
             await release.wait()
             return ()
 
     manager = BlockingManager()
-    execution = asyncio.create_task(manager.execute(FetcherContext(), [request]))
+    execution = asyncio.create_task(manager.execute(RequestExecutionScopeFactory(), [request]))
     await started.wait()
     execution.cancel()
 
     with pytest.raises(asyncio.CancelledError):
         await execution
 
-    assert manager.client is not None and manager.client.is_closed
+    assert manager.session is not None and manager.session.is_closed
 
 
 @pytest.mark.processor
-def test_ensure_unique_path_updates_episode_and_only_warns_on_rename(monkeypatch: pytest.MonkeyPatch):
-    warnings: list[str] = []
+def test_ensure_unique_path_updates_episode_and_only_warns_on_rename():
+    reports: list[tuple[str, ReportLevel]] = []
     resolved_paths: list[str] = []
 
     def resolve_unique_path(path: str) -> str:
         resolved_paths.append(path)
         return "group/video (1).mp4"
 
-    monkeypatch.setattr(Logger, "warning", lambda message: warnings.append(str(message)))
-
     renamed_episode = make_episode("group/video.mp4")
-    result = ensure_unique_path(renamed_episode, resolve_unique_path)
+    with bind_download_report_sink(lambda message, level, _badge, _color: reports.append((message, level))):
+        result = ensure_unique_path(renamed_episode, resolve_unique_path)
+        unchanged_episode = make_episode("group/another.mp4")
+        ensure_unique_path(unchanged_episode, lambda path: path)
 
     assert result is renamed_episode
     assert result["info"]["path"] == Path("group/video (1).mp4")
+    assert result["info"]["listing"].planned_path == Path("group/video.mp4")
     assert resolved_paths == [str(Path("group/video.mp4"))]
-    assert warnings == ["文件名重复，已重命名为 video (1).mp4"]
-
-    unchanged_episode = make_episode("group/another.mp4")
-    ensure_unique_path(unchanged_episode, lambda path: path)
-    assert warnings == ["文件名重复，已重命名为 video (1).mp4"]
+    assert reports == [("文件名重复，已重命名为 video (1).mp4", ReportLevel.WARNING)]
 
 
 @pytest.mark.processor
-def test_show_batch_episode_title_preserves_order_and_group_state(monkeypatch: pytest.MonkeyPatch):
+def test_show_batch_episode_title_preserves_order_and_group_state():
     output: list[tuple[str, str]] = []
 
-    def capture_output(message: Any, badge: Badge, *args: Any, **kwargs: Any):
-        output.append((str(message), badge.text))
-
-    monkeypatch.setattr(Logger, "custom", capture_output)
+    def capture_output(message: str, _level: Any, badge: str | None, _color: Any) -> None:
+        assert badge is not None
+        output.append((message, badge))
 
     current_group: str | None = None
     group_states: list[str | None] = []
@@ -455,9 +438,10 @@ def test_show_batch_episode_title_preserves_order_and_group_state(monkeypatch: p
         make_episode("单集"),
         make_episode("投稿 B/P1", "投稿 B"),
     ]
-    for index, episode in enumerate(episodes, start=1):
-        current_group = show_batch_episode_title(episode["info"], index, len(episodes), current_group)
-        group_states.append(current_group)
+    with bind_download_report_sink(capture_output):
+        for index, episode in enumerate(episodes, start=1):
+            current_group = show_batch_episode_title(episode["info"], index, len(episodes), current_group)
+            group_states.append(current_group)
 
     assert group_states == ["投稿 A", "投稿 A", None, "投稿 B"]
     assert output == [

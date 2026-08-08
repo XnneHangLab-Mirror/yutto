@@ -107,11 +107,11 @@ pacman -S ffmpeg
 
 当当当，是时候主角登场啦～不过在此之前仍然需要学习一点小小的咒语～
 
-你可以通过以下几种方式中的任意一种来召唤（安装）我，我随叫随到～
+你可以通过以下几种方式中的任意一种来召唤（安装）我，我随叫随到～`uiya-yutto` 提供与上游相同的 `yutto` 命令，并发布 manylinux、musllinux、Windows x64/x86、free-threaded 和 macOS Intel/Apple Silicon 的原生 wheel。
 
-### 包管理器一键安装啦
+### 上游包管理器
 
-我目前可以通过一些包管理器直接安装～这是最简单快捷的安装方式～
+Homebrew、AUR 和 archlinuxcn 中的 `yutto` 均为上游发行；本镜像的原生下载内核请通过下面的 PyPI 安装方式获取。
 
 使用 Homebrew 的小伙伴可以尝试下下面的命令：
 
@@ -135,7 +135,8 @@ sudo pacman -S yutto
 你也可以尝试使用 docker 直接运行（运行时的更多参数需要参考下后面的内容～）
 
 ```bash
-docker run --rm -it -v /path/to/download:/app siguremo/yutto <url> [options]
+docker build -t uiya-yutto .
+docker run --rm -it -v /path/to/download:/app uiya-yutto <url> [options]
 ```
 
 与直接本机运行不同的是，这里的下载目标路径是通过 `-v <path>:/app` 指定的，也就是说 docker 内的我会将内容下载到 docker 里的 `/app` 目录下，与之相对应的挂载点 `<path>` 就是下载路径。你也可以直接挂载到 `$(pwd)`，此时就和本机运行我的默认行为一致啦，也是下载到当前目录下～
@@ -145,26 +146,26 @@ docker run --rm -it -v /path/to/download:/app siguremo/yutto <url> [options]
 我的所有版本均已上传到 PyPI，因此你当然可以通过 pip 来安装啦～
 
 ```bash
-pip install yutto
+pip install uiya-yutto
 ```
 
-当然，你也可以通过 [pipx](https://github.com/pypa/pipx)/[uv](https://github.com/astral-sh/uv) 来安装（当然，前提是你要自己先安装 TA 们）
+当然，你也可以通过 [pipx](https://github.com/pypa/pipx)/[uv](https://github.com/astral-sh/uv) 来安装 `uiya-yutto`；安装完成后仍使用 `yutto` 命令。
 
 ```bash
-pipx install yutto      # 使用 pipx
-uv tool install yutto   # 或者使用 uv
+pipx install uiya-yutto      # 使用 pipx
+uv tool install uiya-yutto    # 或者使用 uv
 ```
 
 pipx/uv 会类似 Homebrew 无感地为我创建一个独立的虚拟环境，与其余环境隔离开，避免污染 pip 的环境，因此相对于 pip，pipx/uv 是更推荐的安装方式（uv 会比 pipx 更快些～）。
 
-### 体验 main 分支最新特性 <sup>需自行配置环境</sup>
+### 体验 dev 分支最新特性 <sup>需自行配置环境</sup>
 
 有些时候有一些在 main 分支还没有发布的新特性或者 bugfix，你可以尝试直接安装 main 分支的代码，最快的方式仍然是通过 pip 安装，只不过需要使用 git 描述符
 
 ```bash
-pip install git+https://github.com/yutto-dev/yutto@main                 # 通过 pip
-pipx install git+https://github.com/yutto-dev/yutto@main                # 或者通过 pipx
-uv tool install git+https://github.com/yutto-dev/yutto.git@main         # 或者通过 uv
+pip install git+https://github.com/XnneHangLab-Mirror/yutto@dev                 # 通过 pip
+pipx install git+https://github.com/XnneHangLab-Mirror/yutto@dev                # 或者通过 pipx
+uv tool install git+https://github.com/XnneHangLab-Mirror/yutto.git@dev         # 或者通过 uv
 ```
 
 ## yutto 一下～

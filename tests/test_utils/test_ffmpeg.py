@@ -9,16 +9,19 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-import yutto.downloader.downloader as downloader_module
 import yutto.utils.ffmpeg as ffmpeg_module
-from yutto.downloader.downloader import merge_video_and_audio, should_attach_hvc1_tag
+from yutto.core.request import DownloadRequest
+from yutto.core.result import ResolvedItem
+from yutto.downloader.media_muxer import MediaMuxer
+from yutto.downloader.planner import DownloadPlan, DownloadPlanner, should_attach_hvc1_tag
 from yutto.exceptions import PostprocessingError
+from yutto.types import AId, CId
 from yutto.utils.ffmpeg import FFmpeg, FFmpegCommandBuilder
 from yutto.utils.functional import Singleton, as_sync
 
 if TYPE_CHECKING:
     from yutto.media.codec import VideoCodec
-    from yutto.types import AudioUrlMeta, DownloaderOptions, VideoUrlMeta
+    from yutto.types import AudioUrlMeta, EpisodeData, VideoUrlMeta
 
 
 def make_ffmpeg(path: str) -> FFmpeg:
@@ -52,29 +55,59 @@ def make_video(*, codec: VideoCodec = "hevc", quality: int = 80) -> VideoUrlMeta
     )
 
 
-def make_merge_options() -> DownloaderOptions:
-    return cast(
-        "DownloaderOptions",
+def make_audio_plan(
+    tmp_path: Path,
+    *,
+    audio_save_codec: str = "copy",
+) -> DownloadPlan:
+    path = Path("output")
+    episode = cast(
+        "EpisodeData",
         {
-            "video_save_codec": "copy",
-            "audio_save_codec": "copy",
+            "info": {
+                "listing": ResolvedItem(
+                    avid=AId("1"),
+                    cid=CId("1"),
+                    url="https://www.bilibili.com/video/av1?p=1",
+                    name=path.name,
+                    title=path.name,
+                    cover_url="",
+                    planned_path=path,
+                ),
+                "path": path,
+            },
+            "videos": [],
+            "audios": [make_audio()],
+            "subtitles": [],
+            "metadata": None,
+            "danmaku": {"source_type": None, "save_type": None, "data": []},
+            "cover_data": None,
+            "chapter_info_data": [],
         },
     )
-
-
-async def merge_audio(output_path: Path, options: DownloaderOptions | None = None) -> None:
-    await merge_video_and_audio(
-        video=None,
-        video_path=output_path.with_name("video.m4s"),
-        audio=make_audio(),
-        audio_path=output_path.with_name("audio.m4s"),
-        cover_data=None,
-        cover_path=output_path.with_name("cover.jpg"),
-        chapter_info_data=[],
-        chapter_info_path=output_path.with_name("chapter.ini"),
-        output_path=output_path,
-        options=options or make_merge_options(),
+    request = DownloadRequest.model_validate(
+        {
+            "source": {"url": "BV1muxer"},
+            "resources": {
+                "video": False,
+                "audio": True,
+                "danmaku": False,
+                "subtitle": False,
+                "metadata": False,
+                "cover": False,
+                "chapter_info": False,
+            },
+            "stream": {
+                "audio_download_codec": "mp4a",
+                "audio_save_codec": audio_save_codec,
+            },
+            "output": {
+                "directory": tmp_path,
+                "temporary_directory": tmp_path,
+            },
+        }
     )
+    return DownloadPlanner().plan(episode, request)
 
 
 @pytest.mark.parametrize(
@@ -363,11 +396,8 @@ async def test_ffmpeg_exec_async_kills_after_terminate_timeout(monkeypatch: pyte
 
 @pytest.mark.processor
 @as_sync
-async def test_merge_uses_async_ffmpeg_without_changing_success_logs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_media_muxer_uses_async_ffmpeg(tmp_path: Path):
     commands: list[list[str]] = []
-    infos: list[str] = []
-    errors: list[str] = []
-    debugs: list[str] = []
 
     class FakeFFmpeg:
         async def exec_async(self, args: list[str]) -> subprocess.CompletedProcess[bytes]:
@@ -376,64 +406,51 @@ async def test_merge_uses_async_ffmpeg_without_changing_success_logs(monkeypatch
             Path(args[-1]).write_bytes(b"merged output")
             return subprocess.CompletedProcess(args, 0, b"", b"ffmpeg detail")
 
-    monkeypatch.setattr(downloader_module, "FFmpeg", FakeFFmpeg)
-    monkeypatch.setattr(downloader_module.Logger, "info", lambda message: infos.append(str(message)))
-    monkeypatch.setattr(downloader_module.Logger, "error", lambda message: errors.append(str(message)))
-    monkeypatch.setattr(downloader_module.Logger, "debug", lambda message: debugs.append(str(message)))
-
-    output_path = tmp_path / "output.m4a"
-    options = make_merge_options()
-    options["audio_save_codec"] = "mp4a"
-    await merge_audio(output_path, options)
+    plan = make_audio_plan(tmp_path, audio_save_codec="mp4a")
+    await MediaMuxer(FakeFFmpeg()).mux(plan)
 
     assert len(commands) == 1
-    assert commands[0][-1] == str(output_path)
+    assert commands[0][-1] == str(plan.paths.output)
     assert commands[0][commands[0].index("-acodec") + 1] == "copy"
-    assert options["audio_save_codec"] == "mp4a"
-    assert infos == ["开始合并……", "合并完成！"]
-    assert errors == []
-    assert debugs == ["ffmpeg detail"]
 
 
 @pytest.mark.processor
 @as_sync
 async def test_merge_success_code_without_output_is_structured_error(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
     class MissingOutputFFmpeg:
         async def exec_async(self, args: list[str]) -> subprocess.CompletedProcess[bytes]:
             return subprocess.CompletedProcess(args, 0, b"", b"")
 
-    monkeypatch.setattr(downloader_module, "FFmpeg", MissingOutputFFmpeg)
+    plan = make_audio_plan(tmp_path)
 
     with pytest.raises(PostprocessingError, match="未生成目标文件") as error:
-        await merge_audio(tmp_path / "output.m4a")
+        await MediaMuxer(MissingOutputFFmpeg()).mux(plan)
 
     assert error.value.code.value == 20
 
 
 @pytest.mark.processor
 @as_sync
-async def test_merge_failure_removes_partial_output_and_is_structured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_merge_failure_removes_partial_output_and_is_structured(tmp_path: Path):
     class FailingFFmpeg:
         async def exec_async(self, args: list[str]) -> subprocess.CompletedProcess[bytes]:
             Path(args[-1]).write_bytes(b"partial output")
             return subprocess.CompletedProcess(args, 1, b"", b"ffmpeg detail")
 
-    monkeypatch.setattr(downloader_module, "FFmpeg", FailingFFmpeg)
-    output_path = tmp_path / "output.m4a"
+    plan = make_audio_plan(tmp_path)
 
     with pytest.raises(PostprocessingError, match="ffmpeg detail") as error:
-        await merge_audio(output_path)
+        await MediaMuxer(FailingFFmpeg()).mux(plan)
 
     assert error.value.code.value == 20
-    assert output_path.exists() is False
+    assert plan.paths.output.exists() is False
 
 
 @pytest.mark.processor
 @as_sync
-async def test_merge_cancellation_removes_partial_output(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_merge_cancellation_removes_partial_output(tmp_path: Path):
     started = asyncio.Event()
 
     class BlockingFFmpeg:
@@ -443,19 +460,15 @@ async def test_merge_cancellation_removes_partial_output(monkeypatch: pytest.Mon
             await asyncio.Event().wait()
             raise AssertionError("unreachable")
 
-    infos: list[str] = []
-    monkeypatch.setattr(downloader_module, "FFmpeg", BlockingFFmpeg)
-    monkeypatch.setattr(downloader_module.Logger, "info", lambda message: infos.append(str(message)))
-    output_path = tmp_path / "output.m4a"
-    merging = asyncio.create_task(merge_audio(output_path))
+    plan = make_audio_plan(tmp_path)
+    merging = asyncio.create_task(MediaMuxer(BlockingFFmpeg()).mux(plan))
     await started.wait()
 
     merging.cancel()
     with pytest.raises(asyncio.CancelledError):
         await merging
 
-    assert output_path.exists() is False
-    assert infos == ["开始合并……"]
+    assert plan.paths.output.exists() is False
 
 
 def test_singleton_warns_on_different_args():
@@ -467,31 +480,29 @@ def test_singleton_warns_on_different_args():
         first = _TestSingleton("alpha")
         assert first.value == "alpha"
 
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             second = _TestSingleton("beta")
 
         assert second is first
         assert second.value == "alpha"
-        assert len(w) == 1
-        assert "already initialised" in str(w[0].message)
-        assert "beta" in str(w[0].message)
+        assert len(captured) == 1
+        assert "already initialised" in str(captured[0].message)
+        assert "beta" in str(captured[0].message)
 
-        # Same args → no warning
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             third = _TestSingleton("alpha")
 
         assert third is first
-        assert len(w) == 0
+        assert len(captured) == 0
 
-        # No args → no warning (common pattern: FFmpeg() reuse)
-        with warnings.catch_warnings(record=True) as w:
+        with warnings.catch_warnings(record=True) as captured:
             warnings.simplefilter("always")
             fourth = _TestSingleton()
 
         assert fourth is first
-        assert len(w) == 0
+        assert len(captured) == 0
     finally:
         Singleton._instances.pop(_TestSingleton, None)
         Singleton._init_args.pop(_TestSingleton, None)

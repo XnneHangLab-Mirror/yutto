@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from returns.result import Failure
 
+from yutto.core.operation import ReportColor, ReportLevel, emit_download_report
 from yutto.exceptions import (
     NoAccessPermissionError,
     NotFoundError,
@@ -21,18 +22,14 @@ from yutto.types import (
     VideoUrlMeta,
     format_ids,
 )
-from yutto.utils.console.colorful import colored_string
-from yutto.utils.console.logger import Logger
 from yutto.utils.fetcher import Fetcher, unwrap_fetch_result
 from yutto.utils.functional.data_access import data_has_chained_keys
 from yutto.utils.metadata import Actor, ChapterInfoData, MetaData
 from yutto.utils.time import get_time_stamp_by_now
 
 if TYPE_CHECKING:
-    from httpx import AsyncClient
-
+    from yutto.core.execution import ExecutionScope
     from yutto.types import AvId
-    from yutto.utils.fetcher import FetcherContext
 
 
 class _UgcVideoPageInfo(TypedDict):
@@ -72,10 +69,10 @@ class UgcVideoList(TypedDict):
     pages: list[UgcVideoListItem]
 
 
-async def get_ugc_video_tag(ctx: FetcherContext, client: AsyncClient, avid: AvId) -> list[str]:
+async def get_ugc_video_tag(scope: ExecutionScope, avid: AvId) -> list[str]:
     tags: list[str] = []
     tag_api = "http://api.bilibili.com/x/tag/archive/tags?aid={aid}&bvid={bvid}"
-    res_json = unwrap_fetch_result(await Fetcher.fetch_json(ctx, client, tag_api.format(**avid.to_dict())))
+    res_json = unwrap_fetch_result(await Fetcher.fetch_json(scope, tag_api.format(**avid.to_dict())))
     if res_json["code"] != 0:
         raise NotFoundError(f"无法获取视频 {avid} 标签")
     for tag in res_json["data"]:
@@ -83,10 +80,10 @@ async def get_ugc_video_tag(ctx: FetcherContext, client: AsyncClient, avid: AvId
     return tags
 
 
-async def get_ugc_video_info(ctx: FetcherContext, client: AsyncClient, avid: AvId) -> _UgcVideoInfo:
+async def get_ugc_video_info(scope: ExecutionScope, avid: AvId) -> _UgcVideoInfo:
     regex_ep = re.compile(r"https?://www\.bilibili\.com/bangumi/play/ep(?P<episode_id>\d+)")
     info_api = "http://api.bilibili.com/x/web-interface/view?aid={aid}&bvid={bvid}"
-    info_result = await Fetcher.fetch_json(ctx, client, info_api.format(**avid.to_dict()))
+    info_result = await Fetcher.fetch_json(scope, info_api.format(**avid.to_dict()))
     if isinstance(info_result, Failure):
         raise NotFoundError(f"无法获取该视频 {avid} 信息") from info_result.failure()
     res_json = info_result.unwrap()
@@ -102,15 +99,15 @@ async def get_ugc_video_info(ctx: FetcherContext, client: AsyncClient, avid: AvI
     assert res_json_data is not None, "响应数据无 data 域"
     if res_json_data.get("forward"):
         forward_avid = AId(str(res_json_data["forward"]))
-        Logger.info(f"视频 {avid} 撞车了哦！正在跳转到原视频 {forward_avid}～")
-        return await get_ugc_video_info(ctx, client, forward_avid)
+        emit_download_report(f"视频 {avid} 撞车了哦！正在跳转到原视频 {forward_avid}～")
+        return await get_ugc_video_info(scope, forward_avid)
     episode_id = EpisodeId("")
     if res_json_data.get("redirect_url") and (ep_match := regex_ep.match(res_json_data["redirect_url"])):
         episode_id = EpisodeId(ep_match.group("episode_id"))
 
     actors = _parse_actor_info(res_json_data)
     genres = _parse_genre_info(res_json_data)
-    tags: list[str] = await get_ugc_video_tag(ctx, client, avid)
+    tags: list[str] = await get_ugc_video_tag(scope, avid)
     return _UgcVideoInfo(
         avid=BvId(res_json_data["bvid"]),
         aid=AId(str(res_json_data["aid"])),
@@ -135,8 +132,8 @@ async def get_ugc_video_info(ctx: FetcherContext, client: AsyncClient, avid: AvI
     )
 
 
-async def get_ugc_video_list(ctx: FetcherContext, client: AsyncClient, avid: AvId) -> UgcVideoList:
-    video_info = await get_ugc_video_info(ctx, client, avid)
+async def get_ugc_video_list(scope: ExecutionScope, avid: AvId) -> UgcVideoList:
+    video_info = await get_ugc_video_info(scope, avid)
     if avid not in [video_info["aid"], video_info["bvid"]]:
         avid = video_info["avid"]
     video_title = video_info["title"]
@@ -147,9 +144,9 @@ async def get_ugc_video_list(ctx: FetcherContext, client: AsyncClient, avid: AvI
         "pages": [],
     }
     list_api = "https://api.bilibili.com/x/player/pagelist?aid={aid}&bvid={bvid}&jsonp=jsonp"
-    res_json = (await Fetcher.fetch_json(ctx, client, list_api.format(**avid.to_dict()))).value_or(None)
+    res_json = (await Fetcher.fetch_json(scope, list_api.format(**avid.to_dict()))).value_or(None)
     if res_json is None or res_json.get("data") is None:
-        Logger.warning(f"啊叻？视频 {avid} 不见了诶")
+        emit_download_report(f"啊叻？视频 {avid} 不见了诶", ReportLevel.WARNING)
         return result
 
     # 对无意义的分 p 视频名进行修改
@@ -179,14 +176,20 @@ def show_ai_translation_language(resp_json: dict[str, Any], ai_translation_langu
     # AI 原声翻译功能检测和展示，Example: BV1G3HEz5ETU
     if not data_has_chained_keys(resp_json, ["data", "language", "items"]):
         if ai_translation_language:
-            Logger.warning(f"该视频未启用 AI 原声翻译功能, 无法获得 {ai_translation_language} 语言翻译哦～")
+            emit_download_report(
+                f"该视频未启用 AI 原声翻译功能, 无法获得 {ai_translation_language} 语言翻译哦～",
+                ReportLevel.WARNING,
+            )
         return
     if not resp_json["data"]["language"]["items"]:
         if ai_translation_language:
-            Logger.warning(f"该视频未启用 AI 原声翻译功能, 无法获得 {ai_translation_language} 语言翻译哦～")
+            emit_download_report(
+                f"该视频未启用 AI 原声翻译功能, 无法获得 {ai_translation_language} 语言翻译哦～",
+                ReportLevel.WARNING,
+            )
         return
     current_lang_id = -1
-    Logger.info("该视频已启用的 AI 原声翻译语言列表：")
+    emit_download_report("该视频已启用的 AI 原声翻译语言列表：")
     for i, lang_info in enumerate(resp_json["data"]["language"]["items"]):
         if lang_info["lang"] == ai_translation_language:
             current_lang_id = i
@@ -197,26 +200,30 @@ def show_ai_translation_language(resp_json: dict[str, Any], ai_translation_langu
             lang_info["lang"],
         )
         if i == current_lang_id:
-            log = colored_string(log, "green")
-        Logger.info(log)
+            emit_download_report(log, color=ReportColor.GREEN)
+        else:
+            emit_download_report(log)
     if current_lang_id != -1:
         # language found, do nothing
         return
     if ai_translation_language:
-        Logger.warning(f"该视频未为语言 {ai_translation_language} 支持 AI 原声翻译功能哦～")
+        emit_download_report(
+            f"该视频未为语言 {ai_translation_language} 支持 AI 原声翻译功能哦～",
+            ReportLevel.WARNING,
+        )
         return
-    Logger.info("若想启用 AI 原声翻译功能，可以使用 `--ai-translation-language=<code>` 参数指定目标语言喔～")
+    emit_download_report("若想启用 AI 原声翻译功能，可以使用 `--ai-translation-language=<code>` 参数指定目标语言喔～")
 
 
 async def get_ugc_video_playurl(
-    ctx: FetcherContext, client: AsyncClient, avid: AvId, cid: CId, ai_translation_language: str | None = None
+    scope: ExecutionScope, avid: AvId, cid: CId, ai_translation_language: str | None = None
 ) -> tuple[list[VideoUrlMeta], list[AudioUrlMeta]]:
     # 4048 = 16(useDash) | 64(useHDR) | 128(use4K) | 256(useDolby) | 512(useXXX) | 1024(use8K) | 2048(useAV1)
     play_api = "https://api.bilibili.com/x/player/playurl?avid={aid}&bvid={bvid}&cid={cid}&qn=127&type=&otype=json&fnver=0&fnval=4048&fourk=1"
     if ai_translation_language:
         play_api += f"&cur_language={ai_translation_language}"
 
-    play_result = await Fetcher.fetch_json(ctx, client, play_api.format(**avid.to_dict(), cid=cid))
+    play_result = await Fetcher.fetch_json(scope, play_api.format(**avid.to_dict(), cid=cid))
     if isinstance(play_result, Failure):
         raise NoAccessPermissionError(f"无法获取该视频链接（{format_ids(avid, cid)}）") from play_result.failure()
     resp_json = play_result.unwrap()
@@ -287,12 +294,10 @@ async def get_ugc_video_playurl(
     return (videos, audios)
 
 
-async def get_ugc_video_subtitles(
-    ctx: FetcherContext, client: AsyncClient, avid: AvId, cid: CId
-) -> list[MultiLangSubtitle]:
+async def get_ugc_video_subtitles(scope: ExecutionScope, avid: AvId, cid: CId) -> list[MultiLangSubtitle]:
     subtitle_api = "https://api.bilibili.com/x/player/wbi/v2?aid={aid}&bvid={bvid}&cid={cid}"
     subtitle_url = subtitle_api.format(**avid.to_dict(), cid=cid)
-    res_json = (await Fetcher.fetch_json(ctx, client, subtitle_url)).value_or(None)
+    res_json = (await Fetcher.fetch_json(scope, subtitle_url)).value_or(None)
     if res_json is None:
         return []
     if not data_has_chained_keys(res_json, ["data", "subtitle", "subtitles"]):
@@ -303,10 +308,13 @@ async def get_ugc_video_subtitles(
 
         # 检查 subtitle_url 是否有效
         if subtitle_url is None or not subtitle_url.strip():
-            Logger.warning(f"跳过无效的字幕URL（{format_ids(avid, cid)}），语言：{sub_info.get('lan_doc', '未知')}")
+            emit_download_report(
+                f"跳过无效的字幕URL（{format_ids(avid, cid)}），语言：{sub_info.get('lan_doc', '未知')}",
+                ReportLevel.WARNING,
+            )
             continue
 
-        subtitle_text = (await Fetcher.fetch_json(ctx, client, "https:" + subtitle_url)).value_or(None)
+        subtitle_text = (await Fetcher.fetch_json(scope, "https:" + subtitle_url)).value_or(None)
         if subtitle_text is None:
             continue
         results.append(
@@ -318,16 +326,17 @@ async def get_ugc_video_subtitles(
     return results
 
 
-async def get_ugc_video_chapters(
-    ctx: FetcherContext, client: AsyncClient, avid: AvId, cid: CId
-) -> list[ChapterInfoData]:
+async def get_ugc_video_chapters(scope: ExecutionScope, avid: AvId, cid: CId) -> list[ChapterInfoData]:
     chapter_api = "https://api.bilibili.com/x/player/v2?aid={aid}&bvid={bvid}&cid={cid}"
     chapter_url = chapter_api.format(**avid.to_dict(), cid=cid)
-    chapter_json_info = (await Fetcher.fetch_json(ctx, client, chapter_url)).value_or(None)
+    chapter_json_info = (await Fetcher.fetch_json(scope, chapter_url)).value_or(None)
     if chapter_json_info is None:
         return []
     if not data_has_chained_keys(chapter_json_info, ["data", "view_points"]):
-        Logger.warning(f"无法获取该视频的章节信息（{format_ids(avid, cid)}），原因：{chapter_json_info.get('message')}")
+        emit_download_report(
+            f"无法获取该视频的章节信息（{format_ids(avid, cid)}），原因：{chapter_json_info.get('message')}",
+            ReportLevel.WARNING,
+        )
         return []
 
     raw_chapter_info = chapter_json_info["data"]["view_points"]
@@ -387,7 +396,7 @@ def _parse_actor_info(video_info: dict[str, Any]):
             )
         )
     else:
-        Logger.warning("未找到演职人员信息")
+        emit_download_report("未找到演职人员信息", ReportLevel.WARNING)
     return actors
 
 

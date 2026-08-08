@@ -12,7 +12,8 @@ Repository instructions for automated agents contributing to `yutto`.
 
 - `src/yutto/`: main Python CLI implementation.
 - `tests/`: pytest suites for API, processor, e2e, and biliass-related coverage.
-- `packages/biliass/`: Rust-backed workspace package used by `yutto`.
+- `rust/`: Haya, native HTTP session, and PyO3 extension built into `yutto._core`.
+- `packages/biliass/`: independently released Rust-backed workspace package used by `yutto`.
 - `docs/`: VitePress documentation site.
 - `scripts/`: project maintenance scripts.
 - `schemas/`: generated schemas and related assets.
@@ -21,7 +22,7 @@ Repository instructions for automated agents contributing to `yutto`.
 ## Bootstrap
 
 - Baseline tools: `uv`, `just`, Python 3.11, and FFmpeg.
-- If you touch `packages/biliass` or run a full workspace install from source, also install stable Rust with `clippy` and `rustfmt`.
+- Root source builds require Rust 1.85 or newer; install stable Rust with `clippy` and `rustfmt` for normal development and keep Rust 1.85 compatible.
 - If you touch docs, use the Node/pnpm setup shown in `.github/workflows/vitepress-deploy.yml`.
 - In GitHub Copilot environments, start from `.github/workflows/copilot-setup-steps.yml`.
 
@@ -41,14 +42,16 @@ just docs-setup
 just docs-build
 ```
 
-For biliass Rust changes, also run:
+For root native changes, also run:
 
 ```bash
-cd packages/biliass/rust
-cargo fmt --all
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
+cd rust
+cargo fmt --all -- --check
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-targets --all-features
 ```
+
+For biliass Rust changes, run the equivalent commands from `packages/biliass/rust`.
 
 Use `just run -- ...` or `uv run python -m yutto ...` for local CLI testing. Do not use a globally installed `yutto` binary when you mean to test the local checkout.
 

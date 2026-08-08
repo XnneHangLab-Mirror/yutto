@@ -11,10 +11,14 @@ from typing import TYPE_CHECKING, TypeAlias, TypeVar
 
 from pydantic import BaseModel
 
-from yutto.auth import load_auth
-from yutto.utils.fetcher import FetcherContext
+from yutto.auth import load_auth, validate_profile
+from yutto.core.execution import RequestExecutionScopeFactory
+from yutto.core.result import ResolvedItem, ResolveResult
+from yutto.core.serialization import listing_item_to_wire
+from yutto.utils.fetcher import resolve_proxy
 
 if TYPE_CHECKING:
+    from yutto.auth import AuthInfo
     from yutto.core.request import DownloadRequest
     from yutto.runtime import EventReplay, TaskEvent, TaskSnapshot
 
@@ -82,6 +86,8 @@ class ServerPolicy:
     def prepare_request(self, request: DownloadRequest) -> DownloadRequest:
         """Return an immutable copy with server-owned absolute output paths."""
         self._validate_workers(request)
+        self._validate_proxy(request)
+        self._validate_auth_profile(request)
         self._validate_block_size(request)
         self._validate_save_codecs(request)
         self._validate_subpath_template(request.output.subpath_template)
@@ -108,20 +114,16 @@ class ServerPolicy:
         )
         return request.model_copy(update={"output": output})
 
-    def build_context(self, request: DownloadRequest) -> FetcherContext:
-        """Build a fetch context without attaching credentials to the request."""
-        self._validate_workers(request)
-        context = FetcherContext()
+    def build_scope_factory(self) -> RequestExecutionScopeFactory:
+        """Build the shared request-to-scope boundary used by server tasks."""
+        return RequestExecutionScopeFactory(self.resolve_credentials)
+
+    def resolve_credentials(self, request: DownloadRequest) -> AuthInfo | None:
+        """Resolve one auth profile without attaching credentials to the request."""
         try:
-            context.set_proxy(request.network.proxy)
-            auth = load_auth(self.options.auth_file, request.access.auth_profile)
+            return load_auth(self.options.auth_file, request.access.auth_profile)
         except ValueError as error:
             raise ServerPolicyError(str(error)) from error
-
-        context.set_fetch_workers(request.network.fetch_workers)
-        if auth is not None:
-            context.set_auth_info(auth)
-        return context
 
     def _validate_workers(self, request: DownloadRequest) -> None:
         self._validate_worker_count(
@@ -134,6 +136,20 @@ class ServerPolicy:
             request.network.download_workers,
             self.options.max_download_workers,
         )
+
+    @staticmethod
+    def _validate_proxy(request: DownloadRequest) -> None:
+        try:
+            resolve_proxy(request.network.proxy)
+        except ValueError as error:
+            raise ServerPolicyError(str(error)) from error
+
+    @staticmethod
+    def _validate_auth_profile(request: DownloadRequest) -> None:
+        try:
+            validate_profile(request.access.auth_profile)
+        except ValueError as error:
+            raise ServerPolicyError(str(error)) from error
 
     def _validate_block_size(self, request: DownloadRequest) -> None:
         value = request.network.block_size_bytes
@@ -293,6 +309,12 @@ def _to_json_value(value: object) -> JsonValue:
     if isinstance(value, Path):
         # wire 上的路径统一使用正斜杠，避免协议输出随 server 所在平台变化
         return value.as_posix()
+    if isinstance(value, ResolveResult):
+        result = value.model_dump(mode="python")
+        result["items"] = [listing_item_to_wire(item) for item in value.items]
+        return _to_json_value(result)
+    if isinstance(value, ResolvedItem):
+        return _to_json_value(listing_item_to_wire(value))
     if isinstance(value, BaseModel):
         # python mode 保留 Path 等原生类型，统一交由本函数的分支序列化
         return _to_json_value(value.model_dump(mode="python"))

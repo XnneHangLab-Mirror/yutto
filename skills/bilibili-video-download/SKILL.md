@@ -33,7 +33,7 @@ description: Execute end-to-end Bilibili downloads with yutto. Use this whenever
 - 如果用户没有特别说明，使用 yutto 默认下载行为，不额外添加清晰度、字幕、弹幕等参数。
 - 认证优先推荐 `auth login`，不要使用命令行内联 `--auth` 传递 Cookie，不要默认推荐已弃用的 `--sessdata`。
 - 默认直接使用 `yutto ...`
-- 如果本机没有安装 `yutto`，但安装了 `uv`，优先使用 `uvx yutto ...`
+- 如果本机没有安装 `yutto`，但安装了 `uv`，优先使用 `uvx --from uiya-yutto yutto ...`
 - 这个 skill 面向终端用户，不面向 yutto 开发者；不要默认写 `uv run python -m yutto ...`
 
 ## Reference priority
@@ -52,7 +52,7 @@ description: Execute end-to-end Bilibili downloads with yutto. Use this whenever
 
 1. 选定执行入口
    - 如果系统里已有 `yutto`，使用 `yutto`
-   - 否则如果系统里有 `uv`，使用 `uvx yutto`
+   - 否则如果系统里有 `uv`，使用 `uvx --from uiya-yutto yutto`
    - 否则按 `references/command-recipes.md` 先安装 yutto
 2. 校验 FFmpeg
    - 如果缺失，先安装或明确告知它是下载前置条件
@@ -103,7 +103,7 @@ description: Execute end-to-end Bilibili downloads with yutto. Use this whenever
 
 - 单视频默认用 `yutto <url> -d <dir>`
 - 批量下载默认用 `yutto -b <url> -d <dir>`
-- 如果本机没有 `yutto` 但有 `uv`，把上面的 `yutto` 替换成 `uvx yutto`
+- 如果本机没有 `yutto` 但有 `uv`，把上面的 `yutto` 替换成 `uvx --from uiya-yutto yutto`
 - 目录由用户指定后再执行下载
 - 个人空间、收藏夹、视频列表等不支持选集时，不要硬塞 `-p`
 - 用户要求高清视频、字幕、会员内容时，先检查登录状态

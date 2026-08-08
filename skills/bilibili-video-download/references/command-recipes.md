@@ -33,7 +33,7 @@ yutto
 2. 如果系统里没有 `yutto`，但有 `uv`，直接使用：
 
 ```bash
-uvx yutto
+uvx --from uiya-yutto yutto
 ```
 
 3. 如果两者都没有，再安装。
@@ -43,14 +43,14 @@ uvx yutto
 优先选当前环境里最容易成功的方法：
 
 ```bash
-uv tool install yutto
+uv tool install uiya-yutto
 ```
 
 如果没有 `uv`，再考虑：
 
 ```bash
-pipx install yutto
-python3 -m pip install yutto
+pipx install uiya-yutto
+python3 -m pip install uiya-yutto
 brew tap siguremo/tap
 brew install yutto
 ```
@@ -64,7 +64,7 @@ yutto -h
 如果本机有 `uv` 但不想安装，也可以直接确认：
 
 ```bash
-uvx yutto -h
+uvx --from uiya-yutto yutto -h
 ```
 
 ## 3. 校验 FFmpeg
@@ -114,7 +114,7 @@ yutto auth status
 
 **不要使用** `--auth "SESSDATA=xxxxx; bili_jct=yyyyy"` 传递凭据到命令行——这会将敏感信息暴露在 shell 历史记录、进程列表和日志中。
 
-如果当前入口是 `uvx yutto`，把这里的 `yutto` 一并替换成 `uvx yutto`。
+如果当前入口是 `uvx --from uiya-yutto yutto`，把这里的 `yutto` 一并替换成 `uvx --from uiya-yutto yutto`。
 
 以下场景优先要求检查登录：
 
@@ -215,7 +215,7 @@ yutto <url> -d <dir> -aq 30280
 
 不要在正常交互里要求用户自己提供 `120`、`80`、`64` 这类数值。
 
-如果当前入口是 `uvx yutto`，把这里的 `yutto` 一并替换成 `uvx yutto`。
+如果当前入口是 `uvx --from uiya-yutto yutto`，把这里的 `yutto` 一并替换成 `uvx --from uiya-yutto yutto`。
 
 ## 7. 批量判断
 

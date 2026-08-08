@@ -15,13 +15,14 @@ from yutto.core.events import (
 )
 from yutto.core.request import DownloadRequest
 from yutto.core.result import DownloadResult, ResolveResult
+from yutto.core.serialization import listing_item_to_wire
 from yutto.runtime import TaskRuntime
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from yutto.core.execution import ExecutionScopeFactory
     from yutto.runtime import EventReplay, TaskCapacityPool, TaskContext, TaskEvent, TaskSnapshot
-    from yutto.utils.fetcher import FetcherContext
 
 
 class DownloadApplication(Protocol):
@@ -37,8 +38,8 @@ class DownloadTaskService:
 
     def __init__(
         self,
-        context_factory: Callable[[DownloadRequest], FetcherContext],
-        application_factory: Callable[[FetcherContext, DownloadEventSink], DownloadApplication],
+        scope_factory: ExecutionScopeFactory,
+        application_factory: Callable[[ExecutionScopeFactory, DownloadEventSink], DownloadApplication],
         *,
         replay_limit: int = 100,
         task_limit: int = 256,
@@ -46,7 +47,7 @@ class DownloadTaskService:
         seq_allocator: Callable[[], int] | None = None,
         capacity_pool: TaskCapacityPool | None = None,
     ):
-        self._context_factory = context_factory
+        self._scope_factory = scope_factory
         self._application_factory = application_factory
         self.runtime = TaskRuntime[DownloadRequest, DownloadResult](
             self._run,
@@ -90,8 +91,7 @@ class DownloadTaskService:
         return self.runtime.add_event_listener(listener)
 
     async def _run(self, request: DownloadRequest, task_context: TaskContext) -> DownloadResult:
-        ctx = self._context_factory(request)
-        application = self._application_factory(ctx, _RuntimeDownloadEventSink(task_context))
+        application = self._application_factory(self._scope_factory, _RuntimeDownloadEventSink(task_context))
         return await application.download(request)
 
 
@@ -104,8 +104,8 @@ class ResolveTaskService:
 
     def __init__(
         self,
-        context_factory: Callable[[DownloadRequest], FetcherContext],
-        application_factory: Callable[[FetcherContext, DownloadEventSink], ResolveApplication],
+        scope_factory: ExecutionScopeFactory,
+        application_factory: Callable[[ExecutionScopeFactory, DownloadEventSink], ResolveApplication],
         *,
         replay_limit: int = 100,
         task_limit: int = 256,
@@ -113,7 +113,7 @@ class ResolveTaskService:
         seq_allocator: Callable[[], int] | None = None,
         capacity_pool: TaskCapacityPool | None = None,
     ):
-        self._context_factory = context_factory
+        self._scope_factory = scope_factory
         self._application_factory = application_factory
         self.runtime = TaskRuntime[DownloadRequest, ResolveResult](
             self._run,
@@ -157,8 +157,7 @@ class ResolveTaskService:
         return self.runtime.add_event_listener(listener)
 
     async def _run(self, request: DownloadRequest, task_context: TaskContext) -> ResolveResult:
-        ctx = self._context_factory(request)
-        application = self._application_factory(ctx, _RuntimeDownloadEventSink(task_context))
+        application = self._application_factory(self._scope_factory, _RuntimeDownloadEventSink(task_context))
         return await application.resolve(request)
 
 
@@ -194,31 +193,7 @@ def _encode_runtime_event(event: DownloadEvent) -> tuple[str, dict[str, object]]
             return "item_skipped", {"item": item, "reason": reason.value}
         case DownloadArtifactCreated(item=item, path=path):
             return "artifact_created", {"path": path.as_posix(), "item": item}
-        case DownloadItemListed(
-            avid=avid,
-            cid=cid,
-            url=url,
-            name=name,
-            title=title,
-            cover_url=cover_url,
-            planned_path=planned_path,
-            display_group=display_group,
-            uploader=uploader,
-            description=description,
-            tags=tags,
-        ):
-            return "item_listed", {
-                "avid": avid,
-                "cid": cid,
-                "url": url,
-                "name": name,
-                "title": title,
-                "cover_url": cover_url,
-                "planned_path": planned_path.as_posix(),
-                "display_group": display_group,
-                "uploader": uploader,
-                "description": description,
-                "tags": list(tags),
-            }
+        case DownloadItemListed(item=item):
+            return "item_listed", listing_item_to_wire(item)
         case _ as unreachable:
             assert_never(unreachable)
