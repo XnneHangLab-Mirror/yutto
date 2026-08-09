@@ -1,8 +1,8 @@
 set positional-arguments
 
-VERSION := `uv run scripts/get-version.py src/yutto/__version__.py`
+PACKAGE_VERSION := `uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"`
 BILIASS_VERSION := `uv run scripts/get-version.py packages/biliass/src/biliass/__version__.py`
-DOCKER_NAME := "siguremo/yutto"
+DOCKER_NAME := "uiya-yutto"
 
 run *ARGS:
   uv run python -m yutto {{ARGS}}
@@ -26,8 +26,8 @@ build:
   uv build
 
 release:
-  @echo 'Tagging v{{VERSION}}...'
-  git tag "v{{VERSION}}"
+  @echo 'Tagging v{{PACKAGE_VERSION}}...'
+  git tag "v{{PACKAGE_VERSION}}"
   @echo 'Push to GitHub to trigger publish process...'
   git push --tags
 
@@ -91,10 +91,10 @@ docker-run *ARGS:
   docker run --rm -it -v `pwd`:/app {{DOCKER_NAME}} {{ARGS}}
 
 docker-build:
-  docker build --no-cache -t "{{DOCKER_NAME}}:{{VERSION}}" -t "{{DOCKER_NAME}}:latest" .
+  docker build --no-cache -t "{{DOCKER_NAME}}:{{PACKAGE_VERSION}}" -t "{{DOCKER_NAME}}:latest" .
 
 docker-publish:
-  docker buildx build --no-cache --platform=linux/amd64,linux/arm64 -t "{{DOCKER_NAME}}:{{VERSION}}" -t "{{DOCKER_NAME}}:latest" . --push
+  docker buildx build --no-cache --platform=linux/amd64,linux/arm64 -t "{{DOCKER_NAME}}:{{PACKAGE_VERSION}}" -t "{{DOCKER_NAME}}:latest" . --push
 
 # docs specific
 docs-setup:

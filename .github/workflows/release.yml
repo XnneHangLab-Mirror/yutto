@@ -31,7 +31,7 @@ jobs:
     uses: ./.github/workflows/native-build-and-release.yml
     with:
       working-directory: .
-      artifact-prefix: yutto
+      artifact-prefix: uiya-yutto
       release-ref-prefix: refs/tags/v
       # ring's aarch64 assembly does not compile with the manylinux2014 cross toolchain.
       manylinux-aarch64: "2_28"

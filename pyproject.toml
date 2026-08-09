@@ -1,7 +1,7 @@
 [project]
-name = "yutto"
-version = "2.2.0"
-description = "🧊 一个可爱且任性的 B 站视频下载器"
+name = "uiya-yutto"
+version = "0.3.0"
+description = "为 yutto-uiya 桌面应用重新打包的 yutto 发行版（非官方；上游 https://github.com/yutto-dev/yutto）"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Nyakku Shigure", email = "sigure.qaq@gmail.com" }]
@@ -32,10 +32,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yutto-dev/yutto"
-Documentation = "https://github.com/yutto-dev/yutto"
-Repository = "https://github.com/yutto-dev/yutto"
-Issues = "https://github.com/yutto-dev/yutto/issues"
+Homepage = "https://github.com/XnneHangLab-Mirror/yutto"
+Documentation = "https://github.com/XnneHangLab-Mirror/yutto"
+Repository = "https://github.com/XnneHangLab-Mirror/yutto"
+Issues = "https://github.com/XnneHangLab/yutto-uiya/issues"
 
 [project.scripts]
 yutto = "yutto.__main__:main"

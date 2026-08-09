@@ -5,10 +5,10 @@
 </p>
 
 <p align="center">
-   <a href="https://python.org/" target="_blank"><img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/yutto?logo=python&style=flat-square"></a>
-   <a href="https://pypi.org/project/yutto/" target="_blank"><img src="https://img.shields.io/pypi/v/yutto?style=flat-square" alt="pypi"></a>
-   <a href="https://pypi.org/project/yutto/" target="_blank"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/dm/yutto?style=flat-square"></a>
-   <a href="LICENSE"><img alt="LICENSE" src="https://img.shields.io/github/license/yutto-dev/yutto?style=flat-square"></a>
+   <a href="https://pypi.org/project/uiya-yutto/" target="_blank"><img alt="PyPI - Python Version" src="https://img.shields.io/pypi/pyversions/uiya-yutto?logo=python&style=flat-square"></a>
+   <a href="https://pypi.org/project/uiya-yutto/" target="_blank"><img src="https://img.shields.io/pypi/v/uiya-yutto?style=flat-square" alt="pypi"></a>
+   <a href="https://pypi.org/project/uiya-yutto/" target="_blank"><img alt="PyPI - Downloads" src="https://img.shields.io/pypi/dm/uiya-yutto?style=flat-square"></a>
+   <a href="LICENSE"><img alt="LICENSE" src="https://img.shields.io/github/license/XnneHangLab-Mirror/yutto?style=flat-square"></a>
    <br/>
    <a href="https://github.com/astral-sh/uv"><img alt="uv" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json&style=flat-square"></a>
    <a href="https://github.com/astral-sh/ruff"><img alt="ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square"></a>
@@ -18,11 +18,9 @@
 
 <p align="center"><strong>🧊 yutto，一个可爱且任性的 B 站视频下载器（CLI）</strong></p>
 
-**完整静态文档在这里喔 → [yutto](https://yutto.nyakku.moe/)**
+**`uiya-yutto` 是为 yutto-uiya 重新发行的 yutto 下载内核，命令仍为 `yutto`。原生 wheel 覆盖 upstream 的 manylinux、musllinux、Windows x64/x86、free-threaded 和 macOS Intel/Apple Silicon 矩阵。**
 
-> [!TIP]
->
-> 如果在使用过程中遇到问题，请通过 [Issues](https://github.com/yutto-dev/yutto/issues) 反馈功能正确性问题和功能请求，其他问题请通过 [Discussions](https://github.com/yutto-dev/yutto/discussions) 反馈～
+上游 yutto 项目与文档请见 [yutto](https://yutto.nyakku.moe/)。镜像发行包的问题请通过 [yutto-uiya issue tracker](https://github.com/XnneHangLab/yutto-uiya/issues) 反馈。
 
 ## 什么是 yutto？
 
@@ -61,33 +59,17 @@ yutto 是一个 B 站视频下载器，它可以帮助你下载 B 站上的投�
 
 ## 从安装开始～
 
-### 包管理器一键安装啦
+### 上游包管理器
 
-目前 yutto 已经可以通过部分包管理器直接安装～
-
-使用 Homebrew 的用户可以尝试下下面的命令：
-
-```bash
-brew tap siguremo/tap
-brew install yutto
-```
-
-Arch Linux 用户可以从 [AUR](https://aur.archlinux.org/packages/yutto)（感谢 @ouuan）或 [archlinuxcn](https://github.com/archlinuxcn/repo) 安装：
-
-```bash
-# 从 AUR 安装
-yay -S yutto      # 适用于 yay 用户
-paru -S yutto     # 适用于 paru 用户
-# 或者从 archlinuxcn 安装
-sudo pacman -S yutto
-```
+Homebrew、AUR 和 archlinuxcn 中的 `yutto` 均为上游发行；本镜像的原生下载内核请通过下面的 PyPI 安装方式获取。
 
 ### 使用 Docker
 
 你也可以尝试使用 docker 直接运行 yutto（具体如何运行需要参考下后面的内容～）
 
 ```bash
-docker run --rm -it -v /path/to/download:/app siguremo/yutto <url> [options]
+docker build -t uiya-yutto .
+docker run --rm -it -v /path/to/download:/app uiya-yutto <url> [options]
 ```
 
 与直接运行 yutto 不同的是，这里的下载目标路径是通过 `-v <path>:/app` 指定的，也就是说 docker 里的 yutto 会将内容下载到 docker 里的 `/app` 目录下，与之相对应的挂载点 `<path>` 就是下载路径。你也可以直接挂载到 `$(pwd)`，此时就和本机 yutto 的默认行为一致啦，也是下载到当前目录下～
@@ -99,30 +81,30 @@ docker run --rm -it -v /path/to/download:/app siguremo/yutto <url> [options]
 > 在此之前请确保安装 Python3.11 及以上版本，并配置好 FFmpeg（参照 [yutto 文档的“FFmpeg 下载与配置”](https://yutto.nyakku.moe/guide/quick-start#ffmpeg-下载与配置)）
 
 ```bash
-pip install yutto
+pip install uiya-yutto
 ```
 
-当然，你也可以通过 [pipx](https://github.com/pypa/pipx)/[uv](https://github.com/astral-sh/uv) 来安装 yutto（当然，前提是你要自己先安装它）
+当然，你也可以通过 [pipx](https://github.com/pypa/pipx)/[uv](https://github.com/astral-sh/uv) 来安装 `uiya-yutto`；安装完成后仍使用 `yutto` 命令。
 
 ```bash
-pipx install yutto      # 使用 pipx
-uv tool install yutto   # 或者使用 uv
+pipx install uiya-yutto      # 使用 pipx
+uv tool install uiya-yutto   # 或者使用 uv
 ```
 
 pipx/uv 会类似 Homebrew 无感地为 yutto 创建一个虚拟环境，与其余环境隔离开，避免污染 pip 的环境，因此相对于 pip，pipx/uv 是更推荐的安装方式（uv 会比 pipx 更快些～）。
 
-### 体验 main 分支最新特性
+### 体验 dev 分支最新特性
 
 > [!TIP]
 >
 > 这同样要求你自行配置 Python 和 FFmpeg 环境
 
-有些时候有一些在 main 分支还没有发布的新特性或者 bugfix，你可以尝试直接安装 main 分支的代码，最快的方式仍然是通过 pip 安装，只不过需要使用 git 描述符
+有些时候会有一些尚未发布的新特性或者 bugfix，你可以尝试直接安装 dev 分支的代码，最快的方式仍然是通过 pip 安装，只不过需要使用 git 描述符
 
 ```bash
-pip install git+https://github.com/yutto-dev/yutto@main                 # 通过 pip
-pipx install git+https://github.com/yutto-dev/yutto@main                # 通过 pipx
-uv tool install git+https://github.com/yutto-dev/yutto.git@main         # 通过 uv
+pip install git+https://github.com/XnneHangLab-Mirror/yutto@dev                 # 通过 pip
+pipx install git+https://github.com/XnneHangLab-Mirror/yutto@dev                # 通过 pipx
+uv tool install git+https://github.com/XnneHangLab-Mirror/yutto.git@dev         # 通过 uv
 ```
 
 ## 主要功能
