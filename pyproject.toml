@@ -1,6 +1,6 @@
 [project]
 name = "uiya-yutto"
-version = "0.3.1"
+version = "0.3.2"
 description = "为 yutto-uiya 桌面应用重新打包的 yutto 发行版（非官方；上游 https://github.com/yutto-dev/yutto）"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -1,6 +1,6 @@
 FROM alpine:3.24
 LABEL maintainer="XnneHangLab-Mirror" \
-      version="0.3.1" \
+      version="0.3.2" \
       description="light-weight container based on alpine for uiya-yutto"
 
 RUN set -x \
