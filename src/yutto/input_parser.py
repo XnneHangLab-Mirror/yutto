@@ -35,8 +35,11 @@ def alias_parser(file_path: str) -> dict[str, str]:
 
 
 def file_scheme_parser(url: str) -> list[str]:
-    file_url: str = urllib.parse.urlparse(url).path
-    file_path = path_from_cli(urllib.request.url2pathname(file_url))
+    if url.startswith("file://"):
+        file_url = urllib.parse.urlparse(url).path
+        file_path = path_from_cli(urllib.request.url2pathname(file_url))  # ty: ignore[deprecated]
+    else:
+        file_path = path_from_cli(url)
     emit_download_report(f"解析下载列表 {file_path} 中...")
     result: list[str] = []
     with file_path.open("r", encoding="utf-8") as f:

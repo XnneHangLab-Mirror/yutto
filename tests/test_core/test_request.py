@@ -323,9 +323,12 @@ def test_rpc_mapping_inherits_local_settings_without_credentials():
     assert "legacy-secret" not in request.model_dump_json()
 
 
+@pytest.mark.parametrize("use_file_uri", [False, True])
 def test_task_list_preserves_per_item_network_and_auth_overrides(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    use_file_uri: bool,
 ):
     task_list = tmp_path / "downloads.txt"
     task_list.write_text(
@@ -341,7 +344,7 @@ def test_task_list_preserves_per_item_network_and_auth_overrides(
     args = parser.parse_args(
         handle_default_subcommand(
             [
-                str(task_list),
+                task_list.as_uri() if use_file_uri else str(task_list),
                 "--proxy",
                 "https://127.0.0.1:7890",
                 "--fetch-workers",
