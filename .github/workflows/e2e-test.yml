@@ -12,19 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14", "3.14t"]
+        python-version: ["3.11", "3.12", "3.13", "3.14", "3.14t", "3.15", "3.15t"]
         architecture: ["x64"]
     name: Python ${{ matrix.python-version }} on ${{ matrix.architecture }} e2e test
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v10.0.1
-        with:
-          enable-cache: true
-
       - name: Install python
+        id: python
         uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
@@ -33,6 +29,30 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Prepare wheel cache identity
+        id: wheels
+        run: python scripts/prepare-ci-cache.py
+
+      - name: Install uv
+        id: uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: ""
+          cache-suffix: ci-wheels-${{ steps.wheels.outputs.cache-key }}
+          prune-cache: true
+
+      - name: Cache native build dependencies
+        if: steps.uv.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            rust
+            packages/biliass/rust
+          shared-key: native-${{ matrix.python-version }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('**/pyproject.toml', 'uv.lock') }}
+          env-vars: ImageOS PYO3 PYTHON MATURIN UV YUTTO_CI_BUILD_ENV_KEY
+          cache-bin: false
 
       - name: Install tools
         run: |

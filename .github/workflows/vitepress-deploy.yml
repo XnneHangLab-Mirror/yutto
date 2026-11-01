@@ -20,13 +20,11 @@ jobs:
 
       - uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: '24'
+          working-directory: ./docs
+          node-version: '26'
           cache: true
-          cache-dependency-path: "docs/pnpm-lock.yaml"
-
-      - name: Install dependencies
-        working-directory: ./docs
-        run: vp i --frozen-lockfile
+          run-install: |
+            args: ['--frozen-lockfile']
 
       - name: Build VitePress site
         working-directory: ./docs

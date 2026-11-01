@@ -64,9 +64,10 @@ def make_request(tmp_dir: Path | None) -> DownloadRequest:
     return DownloadRequest.model_validate(
         {
             "source": {"url": "BV1baseline"},
-            "scope": {"batch": False, "with_section": True},
+            "scope": {"batch": False, "with_extra_episodes": True},
             "selection": {
                 "episodes": "2,4",
+                "skip_preview": True,
                 "start_time": "2024-01-02 03:04:05",
                 "end_time": "2025-06-07",
             },
@@ -75,6 +76,7 @@ def make_request(tmp_dir: Path | None) -> DownloadRequest:
                 "audio": False,
                 "danmaku": True,
                 "subtitle": False,
+                "subtitle_languages": ["zh", "en"],
                 "metadata": True,
                 "cover": True,
                 "chapter_info": True,
@@ -188,11 +190,13 @@ async def test_process_request_preserves_extractor_mapping_and_passes_download_r
     ]
     assert captured_extractor_options == {
         "episodes": "2,4",
-        "with_section": True,
+        "with_extra_episodes": True,
+        "skip_preview": True,
         "require_video": True,
         "require_audio": False,
         "require_danmaku": True,
         "require_subtitle": False,
+        "subtitle_languages": ["zh", "en"],
         "require_metadata": True,
         "require_cover": True,
         "require_chapter_info": True,
@@ -306,13 +310,10 @@ async def test_execute_uses_request_scopes_and_keeps_path_resolver_order():
             return (ItemResult(state=ItemState.DONE, output_path=Path(path)),)
 
     def resolve_credentials(request: DownloadRequest) -> AuthInfo:
-        return cast(
-            "AuthInfo",
-            {
-                "SESSDATA": f"{request.access.auth_profile},session",
-                "bili_jct": None,
-            },
-        )
+        return {
+            "SESSDATA": f"{request.access.auth_profile},session",
+            "bili_jct": None,
+        }
 
     manager = RecordingManager()
     result = await manager.execute(RequestExecutionScopeFactory(resolve_credentials), requests)

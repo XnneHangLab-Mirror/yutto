@@ -53,6 +53,7 @@ class YuttoResourceSettings(BaseModel):
     require_audio: Annotated[bool, Field(True)]
     require_danmaku: Annotated[bool, Field(True)]
     require_subtitle: Annotated[bool, Field(True)]
+    subtitle_languages: Annotated[list[str] | None, Field(None)]
     require_metadata: Annotated[bool, Field(False)]
     require_cover: Annotated[bool, Field(True)]
     require_chapter_info: Annotated[bool, Field(True)]
@@ -76,7 +77,8 @@ class YuttoDanmakuSettings(BaseModel):
 
 
 class YuttoBatchSettings(BaseModel):
-    with_section: Annotated[bool, Field(False)]
+    with_extra_episodes: Annotated[bool, Field(False)]
+    skip_preview: Annotated[bool, Field(False)]
     batch_filter_start_time: Annotated[str | None, Field(None)]
     batch_filter_end_time: Annotated[str | None, Field(None)]
 

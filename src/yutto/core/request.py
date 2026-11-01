@@ -32,13 +32,14 @@ class ScopeRequestOptions(_RequestModel):
     """Whether resolution targets one episode or an expanded collection."""
 
     batch: bool = False
-    with_section: bool = False
+    with_extra_episodes: bool = False
 
 
 class SelectionRequestOptions(_RequestModel):
     """Filters applied while selecting episodes from an expanded scope."""
 
     episodes: str = "1~-1"
+    skip_preview: bool = False
     start_time: str | None = None
     end_time: str | None = None
 
@@ -50,6 +51,7 @@ class ResourceRequestOptions(_RequestModel):
     audio: bool = True
     danmaku: bool = True
     subtitle: bool = True
+    subtitle_languages: list[str] | None = None
     metadata: bool = False
     cover: bool = True
     chapter_info: bool = True

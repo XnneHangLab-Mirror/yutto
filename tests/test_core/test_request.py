@@ -2,18 +2,20 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 import yutto.__main__ as main_module
+import yutto.validator as validator_module
 from yutto.cli.cli import add_download_arguments, cli, handle_default_subcommand
 from yutto.cli.request_adapter import (
     download_request_from_mapping,
     download_request_from_namespace,
     download_request_parser_from_settings,
 )
-from yutto.cli.settings import YuttoSettings
+from yutto.cli.settings import YuttoSettings, load_settings_file
 from yutto.core.request import DownloadRequest
 
 pytestmark = pytest.mark.processor
@@ -32,6 +34,7 @@ def test_default_namespace_maps_to_grouped_core_request():
     assert request.access.auth_profile == "default"
     assert request.scope.batch is False
     assert request.selection.episodes == "1~-1"
+    assert request.selection.skip_preview is False
     assert request.resources.video is True
     assert request.resources.metadata is False
     assert request.stream.video_download_codec == "avc"
@@ -57,7 +60,8 @@ def test_namespace_adapter_preserves_download_semantics(tmp_path: Path):
                 "--batch",
                 "--episodes",
                 "2,4~6",
-                "--with-section",
+                "--with-extra-episodes",
+                "--skip-preview",
                 "--batch-filter-start-time",
                 "2026-01-01",
                 "--batch-filter-end-time",
@@ -134,9 +138,10 @@ def test_namespace_adapter_preserves_download_semantics(tmp_path: Path):
         "login_strict": True,
         "vip_strict": True,
     }
-    assert request.scope.model_dump() == {"batch": True, "with_section": True}
+    assert request.scope.model_dump() == {"batch": True, "with_extra_episodes": True}
     assert request.selection.model_dump() == {
         "episodes": "2,4~6",
+        "skip_preview": True,
         "start_time": "2026-01-01",
         "end_time": "2026-02-01",
     }
@@ -145,6 +150,7 @@ def test_namespace_adapter_preserves_download_semantics(tmp_path: Path):
         "audio": False,
         "danmaku": False,
         "subtitle": False,
+        "subtitle_languages": None,
         "metadata": True,
         "cover": False,
         "chapter_info": False,
@@ -192,6 +198,58 @@ def test_namespace_adapter_preserves_download_semantics(tmp_path: Path):
         "block_colorful": True,
         "block_keyword_patterns": ["spoiler", "广告"],
     }
+
+
+@pytest.mark.parametrize(
+    ("arguments", "languages", "subtitle"),
+    [
+        ([], ["zh"], True),
+        (["--subtitle-languages", "zh,en"], ["zh", "en"], True),
+        (["--subtitle-languages", " zh-CN , en "], ["zh-CN", "en"], True),
+        (["--subtitle-languages", "all"], None, True),
+        (["--subtitle-only", "--subtitle-languages", "en"], ["en"], True),
+        (["--no-subtitle", "--subtitle-languages", "zh,en"], ["zh", "en"], False),
+        (["--subtitle-languages", "zh,en", "--no-subtitle"], ["zh", "en"], False),
+    ],
+)
+def test_subtitle_language_cli_overrides_config(
+    tmp_path: Path, arguments: list[str], languages: list[str] | None, subtitle: bool
+):
+    config = tmp_path / "yutto.toml"
+    config.write_text('[resource]\nsubtitle_languages = ["zh"]\n', encoding="utf-8")
+    settings = load_settings_file(config)
+    parser = argparse.ArgumentParser()
+    add_download_arguments(parser, settings)
+
+    request = download_request_from_namespace(parser.parse_args(["BV1xx", *arguments]))
+
+    assert request.resources.subtitle_languages == languages
+    assert request.resources.subtitle is subtitle
+    if "--subtitle-only" in arguments:
+        assert request.resources.video is False
+        assert request.resources.audio is False
+
+
+@pytest.mark.parametrize("value", ["", " ", "zh,", ",en", "zh,,en"])
+def test_subtitle_language_cli_rejects_empty_codes(value: str):
+    with pytest.raises(SystemExit) as exc_info:
+        parse_download_args(["BV1xx", "--subtitle-languages", value])
+
+    assert exc_info.value.code == 2
+
+
+def test_subtitle_language_defaults_and_rpc_overrides():
+    assert DownloadRequest.model_validate({"source": {"url": "BV1xx"}}).resources.subtitle_languages is None
+    assert download_request_from_namespace(parse_download_args(["BV1xx"])).resources.subtitle_languages is None
+    settings = YuttoSettings.model_validate({"resource": {"subtitle_languages": ["zh", "en"]}})
+    payload: dict[str, Any] = {"source": {"url": "BV1xx"}}
+    assert download_request_from_mapping(payload, settings).resources.subtitle_languages == ["zh", "en"]
+    payload["resources"] = {"subtitle_languages": None}
+    assert download_request_from_mapping(payload, settings).resources.subtitle_languages is None
+    payload["resources"] = {"subtitle_languages": []}
+    assert download_request_from_mapping(payload, settings).resources.subtitle_languages == []
+    payload["resources"] = {"subtitle_languages": ["ja"]}
+    assert download_request_from_mapping(payload, settings).resources.subtitle_languages == ["ja"]
 
 
 def test_cli_and_secret_options_do_not_cross_core_boundary(tmp_path: Path):
@@ -324,18 +382,27 @@ def test_rpc_mapping_inherits_local_settings_without_credentials():
 
 
 @pytest.mark.parametrize("use_file_uri", [False, True])
-def test_task_list_preserves_per_item_network_and_auth_overrides(
+@pytest.mark.parametrize("command_prefix", ["", "download "], ids=["implicit-download", "explicit-download"])
+def test_task_list_preserves_inheritance_and_per_item_overrides(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    *,
+    command_prefix: str,
     use_file_uri: bool,
 ):
+    config = tmp_path / "yutto.toml"
+    config.write_text('[basic]\ndir = "configured"\n[auth]\nauth_file = "configured-auth.toml"\n')
+    monkeypatch.setattr(main_module.sys, "argv", ["yutto", "--config", str(config)])
+    monkeypatch.setattr(validator_module, "FFmpeg", lambda: SimpleNamespace(video_encodecs=[], audio_encodecs=[]))
+    nested = tmp_path / "nested.txt"
+    nested.write_text(f"{command_prefix}BV1nested --auth-profile nested")
     task_list = tmp_path / "downloads.txt"
     task_list.write_text(
         "\n".join(
             [
-                "BV1first --proxy no --fetch-workers 2 --num-workers 3 --auth-profile first",
-                "BV1second --no-inherit --proxy auto --fetch-workers 5 --num-workers 7 --auth-profile second",
+                f"{command_prefix}BV1first --proxy no --fetch-workers 2 --num-workers 3 --auth-profile first",
+                f"{command_prefix}BV1second --no-inherit --proxy auto --fetch-workers 5 --num-workers 7 --auth-profile second",
+                f"{command_prefix}BV1third",
+                f'{command_prefix}"{nested}" --proxy no',
             ]
         ),
         encoding="utf-8",
@@ -348,17 +415,20 @@ def test_task_list_preserves_per_item_network_and_auth_overrides(
                 "--proxy",
                 "https://127.0.0.1:7890",
                 "--fetch-workers",
-                "11",
+                "4",
                 "--num-workers",
-                "13",
+                "6",
                 "--auth-profile",
                 "outer",
+                "--auth-file",
+                str(tmp_path / "outer-auth.toml"),
+                "-d",
+                str(tmp_path / "output"),
             ]
         )
     )
-    monkeypatch.setattr(main_module, "validate_basic_arguments", lambda args: None)
-
-    requests = [download_request_from_namespace(item) for item in main_module.flatten_args(args, parser)]
+    items = main_module.flatten_args(args, parser)
+    requests = [download_request_from_namespace(item) for item in items]
 
     assert [
         (
@@ -372,6 +442,20 @@ def test_task_list_preserves_per_item_network_and_auth_overrides(
     ] == [
         ("BV1first", "no", 2, 3, "first"),
         ("BV1second", "auto", 5, 7, "second"),
+        ("BV1third", "https://127.0.0.1:7890", 4, 6, "outer"),
+        ("BV1nested", "no", 4, 6, "nested"),
+    ]
+    assert [request.output.directory for request in requests] == [
+        tmp_path / "output",
+        Path("configured"),
+        tmp_path / "output",
+        tmp_path / "output",
+    ]
+    assert [item.auth_file for item in items] == [
+        tmp_path / "outer-auth.toml",
+        Path("configured-auth.toml"),
+        tmp_path / "outer-auth.toml",
+        tmp_path / "outer-auth.toml",
     ]
 
 

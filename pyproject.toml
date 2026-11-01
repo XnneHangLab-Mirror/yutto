@@ -18,15 +18,16 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
   "Programming Language :: Python :: Implementation :: CPython",
 ]
 dependencies = [
   "biliass==2.5.0",
   "colorama>=0.4.6; sys_platform == 'win32'",
-  "typing-extensions>=4.15.0",
+  "typing-extensions>=4.16.0",
   "dict2xml>=1.7.8",
-  "pydantic>=2.12.5",
-  "returns>=0.26.0",
+  "pydantic>=2.14.0",
+  "returns>=0.29.0",
   "segno>=1.6.6",
   "websockets>=17,<18",
 ]
@@ -43,13 +44,24 @@ yutto = "yutto.__main__:main"
 [dependency-groups]
 dev = [
   "aiofiles>=25.1.0",
-  "ty>=0.0.71",
-  "ruff>=0.16.3",
-  "typos>=1.49.0",
-  "pytest>=9.1.1",
-  "pytest-rerunfailures>=16.5",
-  "syrupy>=5.5.3",
+  "ty>=0.0.95",
+  "ruff>=0.17.3",
+  "typos>=1.51.1",
+  "pytest>=9.2.0",
+  "pytest-rerunfailures>=16.7",
+  "syrupy>=6.1.1",
   "pytest-codspeed>=5.0.3",
+]
+
+[tool.uv]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "rust/Cargo.toml" },
+  { file = "rust/Cargo.lock" },
+  { file = "rust/crates/*/Cargo.toml" },
+  { file = "rust/crates/*/src/**/*.rs" },
+  { env = "MATURIN_PEP517_ARGS" },
+  { env = "RUSTFLAGS" },
 ]
 
 [tool.uv.sources]
@@ -126,5 +138,5 @@ module-name = "yutto._core"
 python-source = "src"
 
 [build-system]
-requires = ["maturin>=1.14,<2.0"]
+requires = ["maturin>=1.14.1,<2.0"]
 build-backend = "maturin"

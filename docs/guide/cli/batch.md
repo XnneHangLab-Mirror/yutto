@@ -79,9 +79,19 @@ yutto <url> -b -p "~3,10,12~14,16,-4~"
 
 ## 同时下载附加剧集
 
-- 参数 `-s` 或 `--with-section`
-- 配置项 `batch.with_section`
+- 参数 `--with-extra-episodes`
+- 配置项 `batch.with_extra_episodes`
 - 默认值 `False`
+
+`-s` 和 `--with-section` 已弃用。目前仍可兼容旧脚本，但会打印弃用提示，请迁移到 `--with-extra-episodes`。
+
+## 跳过预告片
+
+- 参数 `--skip-preview`
+- 配置项 `batch.skip_preview`
+- 默认值 `False`
+
+启用后，番剧批量下载会在选集前排除预告片。因此 `--skip-preview -p=-1` 会选择最后一话正式内容。
 
 ## 指定稿件发布时间范围
 

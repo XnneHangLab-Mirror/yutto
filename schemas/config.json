@@ -256,9 +256,14 @@
     },
     "YuttoBatchSettings": {
       "properties": {
-        "with_section": {
+        "with_extra_episodes": {
           "default": false,
-          "title": "With Section",
+          "title": "With Extra Episodes",
+          "type": "boolean"
+        },
+        "skip_preview": {
+          "default": false,
+          "title": "Skip Preview",
           "type": "boolean"
         },
         "batch_filter_start_time": {
@@ -392,6 +397,21 @@
           "title": "Require Subtitle",
           "type": "boolean"
         },
+        "subtitle_languages": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Subtitle Languages"
+        },
         "require_metadata": {
           "default": false,
           "title": "Require Metadata",
@@ -458,6 +478,7 @@
         "require_audio": true,
         "require_danmaku": true,
         "require_subtitle": true,
+        "subtitle_languages": null,
         "require_metadata": false,
         "require_cover": true,
         "require_chapter_info": true,
@@ -485,7 +506,8 @@
     "batch": {
       "$ref": "#/$defs/YuttoBatchSettings",
       "default": {
-        "with_section": false,
+        "with_extra_episodes": false,
+        "skip_preview": false,
         "batch_filter_start_time": null,
         "batch_filter_end_time": null
       }

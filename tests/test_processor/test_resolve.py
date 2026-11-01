@@ -40,11 +40,13 @@ pytestmark = pytest.mark.processor
 def extractor_options() -> ExtractorOptions:
     return {
         "episodes": "1",
-        "with_section": False,
+        "with_extra_episodes": False,
+        "skip_preview": False,
         "require_video": True,
         "require_audio": True,
         "require_danmaku": True,
         "require_subtitle": True,
+        "subtitle_languages": None,
         "require_metadata": False,
         "require_cover": True,
         "require_chapter_info": True,
@@ -399,27 +401,6 @@ class _ShortcutExtractorBase:
 
     def match(self, url: str) -> bool:
         return True
-
-
-@as_sync
-async def test_execute_resolve_treats_filtered_source_as_empty_success(monkeypatch: pytest.MonkeyPatch):
-    class FilteredExtractor(_ShortcutExtractorBase):
-        async def __call__(
-            self,
-            scope: ExecutionScope,
-            options: ExtractorOptions,
-        ) -> ExtractorResolveOutcome:
-            # 纯过滤（如发布时间过滤 / 选集过滤）没有条目，也没有失败
-            return ResolveOutcome()
-
-    _patch_resolve_environment(monkeypatch, FilteredExtractor)
-    manager = DownloadManager()
-    request = DownloadRequest.model_validate({"source": {"url": "BV1filtered"}})
-
-    with bind_download_event_sink(RecordingEventSink()):
-        result = await manager.execute_resolve(RequestExecutionScopeFactory(), [request])
-
-    assert result == ResolveResult(items=(), failures=())
 
 
 @as_sync

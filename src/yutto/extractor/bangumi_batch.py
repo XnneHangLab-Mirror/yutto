@@ -81,13 +81,18 @@ class BangumiBatchExtractor(BatchExtractor):
 
         bangumi_list = await get_bangumi_list(scope, self.season_id)
         emit_download_report(bangumi_list["title"], badge="番剧")
-        # 如果没有 with_section 则不需要专区内容
+        # 如果没有 with_extra_episodes 则不需要专区内容
         bangumi_list["pages"] = list(
-            filter(lambda item: options["with_section"] or not item["is_section"], bangumi_list["pages"])
+            filter(
+                lambda item: options["with_extra_episodes"] or not item["is_section"],
+                bangumi_list["pages"],
+            )
         )
+        if options["skip_preview"]:
+            bangumi_list["pages"] = list(filter(lambda item: not item["is_preview"], bangumi_list["pages"]))
         # 选集过滤
         episodes = parse_episodes_selection(options["episodes"], len(bangumi_list["pages"]))
-        bangumi_list["pages"] = list(filter(lambda item: item["id"] in episodes, bangumi_list["pages"]))
+        bangumi_list["pages"] = [item for index, item in enumerate(bangumi_list["pages"], start=1) if index in episodes]
         return ResolveOutcome(
             items=tuple(
                 make_bangumi_episode(

@@ -95,14 +95,11 @@ require_subtitle = false
 # 设置弹幕速度
 speed = 2.0
 # 设置弹幕屏蔽关键词
-block_keyword_patterns = [
-   ".*keyword1.*",
-   ".*keyword2.*",
-]
+block_keyword_patterns = [".*keyword1.*", ".*keyword2.*"]
 
 [batch]
 # 下载额外剧集
-with_section = true
+with_extra_episodes = true
 ```
 
 如果你使用 VS Code 对配置文件编辑，强烈建议使用 [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml) 扩展，配合我提供的 schema，可以获得最佳的提示体验。

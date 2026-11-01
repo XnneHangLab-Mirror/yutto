@@ -30,18 +30,38 @@ DOWNLOAD_RESOURCE_TYPES: list[DownloadResourceType] = [
     "chapter_info",
 ]
 SUBCOMMANDS: list[str] = ["download", "auth", "serve"]
-REMOVED_TOP_LEVEL_SUBCOMMANDS: list[str] = ["login"]
+
+
+class _DeprecatedExtraEpisodesAction(argparse.Action):
+    def __init__(self, option_strings: Sequence[str], dest: str, **kwargs: Any):
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Any,
+        option_string: str | None = None,
+    ) -> None:
+        Logger.deprecated_warning(f"参数 {option_string} 已弃用，推荐改用 --with-extra-episodes")
+        setattr(namespace, self.dest, True)
 
 
 def handle_default_subcommand(argv: list[str]) -> list[str]:
     if len(argv) == 0:
         return ["download", *argv]
-    if argv[0] in REMOVED_TOP_LEVEL_SUBCOMMANDS:
-        return argv
     if argv[0] not in SUBCOMMANDS and argv[0] not in ["-v", "--version"]:
         argv.insert(0, "download")
 
     return argv
+
+
+def get_download_subparser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction) and "download" in action.choices:
+            return action.choices["download"]
+    else:
+        raise ValueError("download subparser not found")
 
 
 def parse_config_path() -> Path | None:
@@ -145,6 +165,15 @@ def add_serve_arguments(parser: argparse.ArgumentParser, settings: YuttoSettings
         default=settings.basic.jobs,
         help="同时执行的下载任务数，默认为 1",
     )
+
+
+def parse_subtitle_languages(value: str) -> list[str] | None:
+    if value.strip().lower() == "all":
+        return None
+    languages = [language.strip() for language in value.split(",")]
+    if not all(languages):
+        raise argparse.ArgumentTypeError("字幕语言代码不能为空，使用 `,` 分隔，或使用 all 下载全部字幕")
+    return languages
 
 
 def add_download_arguments(parser: argparse.ArgumentParser, settings: YuttoSettings):
@@ -355,6 +384,13 @@ def add_download_arguments(parser: argparse.ArgumentParser, settings: YuttoSetti
         help="仅生成字幕文件",
     )
     group_resource.add_argument(
+        "--subtitle-languages",
+        default=settings.resource.subtitle_languages,
+        type=parse_subtitle_languages,
+        metavar="LANGUAGES",
+        help="字幕语言代码，使用 `,` 分隔（如 zh 或 zh,en），包含地区及 AI 变体；默认 all 下载全部字幕",
+    )
+    group_resource.add_argument(
         "--with-metadata",
         dest="require_metadata",
         action=create_select_required_action(select=["metadata"]),
@@ -448,11 +484,24 @@ def add_download_arguments(parser: argparse.ArgumentParser, settings: YuttoSetti
     group_batch.add_argument("-b", "--batch", action="store_true", help="批量下载")
     group_batch.add_argument("-p", "--episodes", default="1~-1", help="选集")
     group_batch.add_argument(
+        "--with-extra-episodes",
+        action="store_true",
+        default=settings.batch.with_extra_episodes,
+        help="同时下载附加剧集（PV、预告以及特别篇等专区内容）",
+    )
+    group_batch.add_argument(
         "-s",
         "--with-section",
+        dest="with_extra_episodes",
+        action=_DeprecatedExtraEpisodesAction,
+        default=argparse.SUPPRESS,
+        help="（弃用）等同于 --with-extra-episodes，请迁移到正式名称",
+    )
+    group_batch.add_argument(
+        "--skip-preview",
         action="store_true",
-        default=settings.batch.with_section,
-        help="同时下载附加剧集（PV、预告以及特别篇等专区内容）",
+        default=settings.batch.skip_preview,
+        help="跳过预告片",
     )
     group_batch.add_argument(
         "--batch-filter-start-time",

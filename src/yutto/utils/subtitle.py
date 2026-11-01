@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 SubtitleLineData = TypedDict(
     "SubtitleLineData",
@@ -15,6 +18,19 @@ SubtitleLineData = TypedDict(
 SubtitleData = list[SubtitleLineData]
 
 
+def matches_subtitle_language(code: str, languages: Sequence[str] | None) -> bool:
+    """Match language codes and their variants; None selects all, [] selects none."""
+    if languages is None:
+        return True
+    code = code.lower()
+    for language in languages:
+        language = language.strip().lower()
+        for candidate in (code, code.removeprefix("ai-")):
+            if candidate == language or candidate.startswith(language + "-"):
+                return True
+    return False
+
+
 class Subtitle:
     """播放列表类"""
 
@@ -26,11 +42,11 @@ class Subtitle:
         self._text += string + "\n"
 
     @staticmethod
-    def time_format(seconds: int):
-        ms = int(1000 * (seconds - int(seconds)))
-        seconds = int(seconds)
-        minutes, sec = seconds // 60, seconds % 60
-        hour, min = minutes // 60, minutes % 60
+    def time_format(seconds: float):
+        total_ms = round(seconds * 1000)
+        total_seconds, ms = divmod(total_ms, 1000)
+        minutes, sec = divmod(total_seconds, 60)
+        hour, min = divmod(minutes, 60)
         return f"{hour:02}:{min:02}:{sec:02},{ms:03}"
 
     def write_subtitle(self, subtitle_line_data: SubtitleLineData) -> None:

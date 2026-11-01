@@ -372,11 +372,13 @@ class DownloadManager:
             if extractor.match(url):
                 extractor_options = ExtractorOptions(
                     episodes=request.selection.episodes,
-                    with_section=request.scope.with_section,
+                    with_extra_episodes=request.scope.with_extra_episodes,
+                    skip_preview=request.selection.skip_preview,
                     require_video=request.resources.video,
                     require_audio=request.resources.audio,
                     require_danmaku=request.resources.danmaku,
                     require_subtitle=request.resources.subtitle,
+                    subtitle_languages=request.resources.subtitle_languages,
                     require_metadata=request.resources.metadata,
                     require_cover=request.resources.cover,
                     require_chapter_info=request.resources.chapter_info,

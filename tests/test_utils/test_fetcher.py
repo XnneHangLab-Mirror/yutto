@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import MappingProxyType
 from typing import Any, cast
 
@@ -143,7 +144,7 @@ class _StatusSession:
 
 
 @as_sync
-async def test_get_size_uses_the_native_probe_and_only_logs_a_known_size(monkeypatch: pytest.MonkeyPatch):
+async def test_get_size_reports_started_and_completed_with_probe_result(monkeypatch: pytest.MonkeyPatch):
     class SizeSession:
         def __init__(self):
             self.sizes = [42, None]
@@ -161,7 +162,12 @@ async def test_get_size_uses_the_native_probe_and_only_logs_a_known_size(monkeyp
     assert await Fetcher.get_size(scope, "https://example.com/known") == Success(42)
     assert await Fetcher.get_size(scope, "https://example.com/unknown") == Success(None)
     assert session.urls == ["https://example.com/known", "https://example.com/unknown"]
-    assert reports == ["Get size: https://example.com/known 42"]
+    assert reports == [
+        "Fetch size started: https://example.com/known",
+        "Fetch size completed: https://example.com/known (42 bytes)",
+        "Fetch size started: https://example.com/unknown",
+        "Fetch size completed: https://example.com/unknown (size unknown)",
+    ]
 
 
 @as_sync
@@ -211,7 +217,11 @@ async def test_fetch_bin_keeps_non_success_status_as_success_none():
 
 
 @as_sync
-async def test_fetch_json_retries_non_success_status():
+async def test_fetch_json_retries_non_success_status(monkeypatch: pytest.MonkeyPatch):
+    async def no_sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr(fetcher_module.asyncio, "sleep", no_sleep)
     scope = ExecutionScope(cast("Any", _StatusSession(404)))
     match await Fetcher.fetch_json(scope, "https://example.com"):
         case Failure(error):
@@ -273,3 +283,43 @@ async def test_fetcher_does_not_retry_a_closed_session():
     scope = ExecutionScope(cast("Any", ClosedSession()))
     with pytest.raises(SessionClosedError, match="closed"):
         await Fetcher.touch_url(scope, "https://example.com")
+
+
+@pytest.mark.parametrize(
+    "method", ["fetch_text", "fetch_bin", "fetch_json", "get_redirected_url", "get_size", "touch_url"]
+)
+@as_sync
+async def test_fetcher_limits_concurrent_requests(method: str):
+    started: list[str] = []
+    two_started = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingSession:
+        async def get(self, url: str, **kwargs: Any) -> _StatusResponse:
+            started.append(url)
+            if len(started) == 2:
+                two_started.set()
+            await release.wait()
+            response = _StatusResponse(200, url)
+            response.body = b"{}"
+            return response
+
+        async def probe_size(self, url: str) -> int:
+            await self.get(url)
+            return 2
+
+    scope = ExecutionScope(cast("Any", BlockingSession()), fetch_workers=2)
+    fetch = getattr(Fetcher, method)
+    tasks = [asyncio.create_task(fetch(scope, f"https://example.com/{index}")) for index in range(3)]
+    try:
+        await asyncio.wait_for(two_started.wait(), timeout=1)
+        await asyncio.sleep(0)
+        assert len(started) == 2
+        release.set()
+        results = await asyncio.wait_for(asyncio.gather(*tasks), timeout=1)
+        assert len(started) == 3
+        assert all(isinstance(result, Success) for result in results)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)

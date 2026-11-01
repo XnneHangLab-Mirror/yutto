@@ -20,9 +20,12 @@ from yutto.types import (
 from yutto.utils.fetcher import Fetcher, unwrap_fetch_result
 from yutto.utils.functional import data_has_chained_keys
 from yutto.utils.metadata import Actor, MetaData
+from yutto.utils.subtitle import matches_subtitle_language
 from yutto.utils.time import get_time_stamp_by_now
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from yutto.core.execution import ExecutionScope
     from yutto.types import (
         AvId,
@@ -55,7 +58,7 @@ class _BangumiSection(TypedDict):
     episodes: list[_BangumiEpisode]
 
 
-class _BangumiSeason(TypedDict):
+class _BangumiSeasonResult(TypedDict):
     title: str
     episodes: list[_BangumiEpisode]
     evaluate: str
@@ -101,7 +104,7 @@ async def get_bangumi_list(scope: ExecutionScope, season_id: SeasonId) -> Bangum
     resp_json = list_result.unwrap()
     if resp_json.get("result") is None:
         raise NoAccessPermissionError(f"无法解析该番剧列表（season_id: {season_id}），原因：{resp_json.get('message')}")
-    result = cast("_BangumiSeason", resp_json["result"])
+    result = cast("_BangumiSeasonResult", resp_json["result"])
     section_episodes = []
     for section in result.get("section", []):
         if section["type"] != 5:
@@ -193,7 +196,9 @@ async def get_bangumi_playurl(
     return (videos, audios)
 
 
-async def get_bangumi_subtitles(scope: ExecutionScope, avid: AvId, cid: CId) -> list[MultiLangSubtitle]:
+async def get_bangumi_subtitles(
+    scope: ExecutionScope, avid: AvId, cid: CId, languages: Sequence[str] | None = None
+) -> list[MultiLangSubtitle]:
     subtitle_api = "https://api.bilibili.com/x/player/wbi/v2?aid={aid}&bvid={bvid}&cid={cid}"
     subtitle_url = subtitle_api.format(**avid.to_dict(), cid=cid)
     subtitles_json_info = (await Fetcher.fetch_json(scope, subtitle_url)).value_or(None)
@@ -208,6 +213,8 @@ async def get_bangumi_subtitles(scope: ExecutionScope, avid: AvId, cid: CId) -> 
     subtitles_info = subtitles_json_info["data"]["subtitle"]
     results: list[MultiLangSubtitle] = []
     for sub_info in subtitles_info["subtitles"]:
+        if not matches_subtitle_language(sub_info["lan"], languages):
+            continue
         subtitle_url = sub_info["subtitle_url"]
 
         # 检查 subtitle_url 是否有效
@@ -276,7 +283,7 @@ def _parse_bangumi_metadata(
         source="",  # TODO
         actor=_parse_bangumi_actor(up_info),
         genre=[],  # TODO
-        tag=styles,
+        tag=list(styles),
         website="",  # TODO
         original_filename="",  # TODO
         chapter_info_data=[],  # There are no chapter info in bangumi for now
