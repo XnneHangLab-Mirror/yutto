@@ -1,4 +1,16 @@
-# yutto
+# uiya-yutto
+
+这是供 yutto-uiya 使用的非官方 yutto 发行版，上游为 [yutto-dev/yutto](https://github.com/yutto-dev/yutto)。Python 导入名及命令仍为 `yutto`。
+
+当前测试版：`uiya-yutto==0.3.4rc1`，支持从合集成员的 BV 播放地址批量展开所属合集。
+
+下载 Release 附件 `parse.py` 后，可以仅解析、不下载资源：
+
+```bash
+uv run --with uiya-yutto==0.3.4rc1 python parse.py "https://www.bilibili.com/video/BV17zDWYwEj8/?p=2"
+```
+
+下面保留上游 yutto 的使用说明。
 
 <p align="center">
    <img src="./docs/public/logo.png" width="400px">
