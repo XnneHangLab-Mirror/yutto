@@ -1,0 +1,40 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v0.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  msrv:
+    if: github.repository == 'XnneHangLab-Mirror/yutto'
+    name: Rust 1.85 compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust 1.85 toolchain
+        uses: dtolnay/rust-toolchain@1.85.0
+        with:
+          components: clippy
+      - name: Check MSRV compatibility
+        working-directory: rust
+        run: |
+          cargo check --locked --all-targets --all-features
+          cargo clippy --locked --all-targets --all-features -- -D warnings
+          cargo test --locked --all-targets --all-features
+
+  build-and-release:
+    needs: msrv
+    uses: ./.github/workflows/build-and-release.yml
+    with:
+      working-directory: .
+      artifact-prefix: uiya-yutto
+      release-ref-prefix: refs/tags/v0.
+      manylinux-aarch64: "2_28"
+    permissions:
+      contents: write
+      id-token: write

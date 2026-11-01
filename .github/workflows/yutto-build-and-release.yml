@@ -33,6 +33,7 @@ concurrency:
 
 jobs:
   msrv:
+    if: github.repository == 'yutto-dev/yutto'
     name: Rust 1.85 compatibility
     runs-on: ubuntu-latest
     steps:

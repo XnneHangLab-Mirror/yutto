@@ -1,4 +1,8 @@
-# yutto
+# uiya-yutto
+
+这是供 yutto-uiya 使用的非官方 yutto 发行版，上游为 [yutto-dev/yutto](https://github.com/yutto-dev/yutto)。Python 导入名及命令仍为 `yutto`。
+
+发行包请见本仓库 [Releases](https://github.com/XnneHangLab-Mirror/yutto/releases)。下面保留上游 yutto 的使用说明。
 
 <p align="center">
    <img src="./docs/public/logo.png" width="400px">
