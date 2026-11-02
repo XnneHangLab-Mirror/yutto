@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from returns.result import Failure
 
@@ -18,9 +18,7 @@ from yutto.types import (
     BvId,
     CId,
     EpisodeId,
-    MId,
     MultiLangSubtitle,
-    SeriesId,
     VideoUrlMeta,
     format_ids,
 )
@@ -56,7 +54,6 @@ class _UgcVideoInfo(TypedDict):
     genre: list[str]
     actor: list[Actor]
     tag: list[str]
-    collection: NotRequired[tuple[MId, SeriesId]]
 
 
 class UgcVideoListItem(TypedDict):
@@ -72,7 +69,6 @@ class UgcVideoList(TypedDict):
     pubdate: int
     avid: AvId
     pages: list[UgcVideoListItem]
-    collection: NotRequired[tuple[MId, SeriesId]]
 
 
 async def get_ugc_video_tag(scope: ExecutionScope, avid: AvId) -> list[str]:
@@ -114,7 +110,7 @@ async def get_ugc_video_info(scope: ExecutionScope, avid: AvId) -> _UgcVideoInfo
     actors = _parse_actor_info(res_json_data)
     genres = _parse_genre_info(res_json_data)
     tags: list[str] = await get_ugc_video_tag(scope, avid)
-    result = _UgcVideoInfo(
+    return _UgcVideoInfo(
         avid=BvId(res_json_data["bvid"]),
         aid=AId(str(res_json_data["aid"])),
         bvid=BvId(res_json_data["bvid"]),
@@ -135,9 +131,6 @@ async def get_ugc_video_info(scope: ExecutionScope, avid: AvId) -> _UgcVideoInfo
         tag=tags,
         genre=genres,
     )
-    if season := res_json_data.get("ugc_season"):
-        result["collection"] = (MId(str(season["mid"])), SeriesId(str(season["id"])))
-    return result
 
 
 async def get_ugc_video_list(scope: ExecutionScope, avid: AvId) -> UgcVideoList:
@@ -151,8 +144,6 @@ async def get_ugc_video_list(scope: ExecutionScope, avid: AvId) -> UgcVideoList:
         "pubdate": video_info["pubdate"],
         "pages": [],
     }
-    if collection := video_info.get("collection"):
-        result["collection"] = collection
     # 对无意义的分 p 视频名进行修改
     for i, page_info in enumerate(video_info["pages"]):
         if _is_meaningless_name(page_info["part"]):
